@@ -404,6 +404,7 @@ function cacheRemoverGrande_(chave) {
 }
 
 var TAG_SAF_SPREADSHEET_ID = '1a8cWEh_opmrR_7JzT2brkTIkI7HHwxLDxdPpU627hjQ';
+var TAG_SAF_ABA_ = 'BASE TAG - SAF';
 // v2 em 2026-07-28: passou de chave única (teto silencioso de ~95KB) pra cache
 // FATIADO via cacheGravarGrande_/cacheLerGrande_ — a chave antiga guardava o
 // JSON inteiro num put simples e ficaria ilegível pro leitor fatiado.
@@ -573,8 +574,8 @@ function obterTotaisTagSaf_(forcar) {
   }
 
   var planilha = SpreadsheetApp.openById(TAG_SAF_SPREADSHEET_ID);
-  var aba = planilha.getSheetByName('BASE TAG - SAF');
-  if (!aba) throw new Error('Aba "BASE TAG - SAF" não encontrada.');
+  var aba = planilha.getSheetByName(TAG_SAF_ABA_);
+  if (!aba) throw new Error('Aba "' + TAG_SAF_ABA_ + '" não encontrada.');
 
   var ultimaLinha = aba.getLastRow();
   var resultado = {};
@@ -1932,10 +1933,29 @@ var MESES_TEXTO_ = {
  * DEVOLVE null quando não entende — nunca uma data chutada. Data errada é pior
  * que ocorrência faltando: ela entra no mês errado e ninguém percebe.
  */
-function parseDataOcorrencia_(valor) {
+/**
+ * Parser único de data BR para todo o projeto (substitui as implementações
+ * antes duplicadas em `parseDataOcorrencia_` e `safParseData_`).
+ *
+ * POR QUE FOI CONSOLIDADO (2026-09-20): as duas versões antigas aceitavam
+ * formatos ligeiramente diferentes e, pior, `safParseData_` NÃO validava
+ * "rolagem" de data (31/02 virava silenciosamente 03/03 com `new Date(...)`
+ * puro), enquanto `parseDataOcorrencia_` já rejeitava esse caso com
+ * `montarDataSegura_`. Isso fazia a MESMA célula malformada virar `null`
+ * numa base e uma data errada (~1 mês adiantada) na outra. Agora as duas só
+ * chamam esta função — mesma cobertura de formato, mesma validação.
+ *
+ * Formatos cobertos: Date nativo · "2026-05-06" (ISO) · "06-May-2026" ·
+ * "9-jun.-2026" (nome de mês PT/EN) · "06/05/2026" (numérico, dia primeiro).
+ *
+ * DEVOLVE null quando não entende ou quando a data não existe (31/02) —
+ * nunca uma data chutada. Data errada é pior que ocorrência faltando: ela
+ * entra no mês errado e ninguém percebe.
+ */
+function parseDataBr_(valor) {
   if (valor instanceof Date) return isNaN(valor.getTime()) ? null : valor;
 
-  var texto = String(valor || '').trim();
+  var texto = String(valor == null ? '' : valor).trim();
   if (!texto) return null;
 
   // Corta hora, se vier junto ("06-May-2026 12:00 AM").
@@ -1960,6 +1980,11 @@ function parseDataOcorrencia_(valor) {
   if (num) return montarDataSegura_(Number(num[3]), Number(num[2]), Number(num[1]));
 
   return null;
+}
+
+/** @deprecated use `parseDataBr_` diretamente. Mantida como alias fino para não alterar todos os call sites de uma vez. */
+function parseDataOcorrencia_(valor) {
+  return parseDataBr_(valor);
 }
 
 /** Monta a data e confere que ela não "rolou" (31/02 viraria 03/03). */
@@ -3160,6 +3185,7 @@ function debugPrudencio() {
  */
 var RISCOS_SPREADSHEET_ID = '12h0pZZ9ocWgE-VzvCjtsHbxJloVVyiWF3dkXb-jUo48';
 var RISCOS_ABA_ = 'Riscos Altos';
+var RISCOS_CACHE_CHAVE_ = 'riscosAltos_v1';
 
 /**
  * Converte texto de orçamento em número. A célula pode ter mais de um valor
@@ -3226,36 +3252,81 @@ function contarEm_(mapa, chave) {
 }
 
 /**
+ * Colunas sem as quais a agregação do painel RISK não faz sentido (uma
+ * coluna renomeada aqui produziria um relatório zerado/errado em silêncio —
+ * ver histórico do bug abaixo). As demais (ranking, plano de ação, datas,
+ * série semanal) degradam para campo vazio sem comprometer o total.
+ */
+var RISCOS_COLUNAS_OBRIGATORIAS_ = [
+  { chave: 'status', rotulo: 'Status' },
+  { chave: 'area', rotulo: 'Área' },
+  { chave: 'macroTema', rotulo: 'Macro Tema' },
+  { chave: 'risco', rotulo: 'Risco' },
+  { chave: 'quantidade', rotulo: 'Quantidade' },
+  { chave: 'orcamento', rotulo: 'Orçamento' },
+  { chave: 'validado', rotulo: 'Validado EHS' }
+];
+
+/**
  * Lê a aba "Riscos Altos" e devolve a lista de riscos + agregações prontas
  * para o painel RISK. Uma única leitura da planilha; tudo já agregado aqui.
+ *
+ * NUNCA LANÇA (2026-09-20): antes era a única função `get*` do projeto sem
+ * try/catch nem cache — qualquer erro (planilha fora do ar, aba renomeada)
+ * propagava cru até o `google.script.run` do frontend e travava o card RISK
+ * sem mensagem. Segue agora o mesmo padrão de `getFarolSaf`/`getAtsAbertos`:
+ * devolve `{ erro }` em vez de lançar, e cacheia por CACHE_SEGUNDOS_6H_.
+ *
+ * Também não mascara mais coluna sumida como célula vazia: antes, uma coluna
+ * não encontrada virava índice -1 e toda linha lia '' silenciosamente ali —
+ * o relatório saía zerado/errado sem nenhum aviso. Agora falta de coluna em
+ * RISCOS_COLUNAS_OBRIGATORIAS_ lança erro explícito, capturado abaixo.
  */
-function getRiscosAltos() {
-  var planilha = SpreadsheetApp.openById(RISCOS_SPREADSHEET_ID);
-  var aba = planilha.getSheetByName(RISCOS_ABA_);
-  if (!aba) throw new Error('Aba "' + RISCOS_ABA_ + '" não encontrada na planilha Riscos Altos EHS.');
-
-  var cab = localizarLinhaCabecalho_(aba, 8);
-  var ultimaLinha = aba.getLastRow();
-  var ultimaColuna = aba.getLastColumn();
-
-  var col = {
-    ranking: indiceColuna_(cab.cabecalhos, 'ranking risco'),
-    area: indiceColuna_(cab.cabecalhos, 'area'),
-    macroTema: indiceColuna_(cab.cabecalhos, 'macro tema'),
-    risco: indiceColuna_(cab.cabecalhos, 'risco'),
-    planoAcao: indiceColuna_(cab.cabecalhos, 'plano de acao'),
-    quantidade: indiceColuna_(cab.cabecalhos, 'quantidade'),
-    orcamento: indiceColuna_(cab.cabecalhos, 'orcamento'),
-    validado: indiceColuna_(cab.cabecalhos, 'validado ehs'),
-    status: indiceColuna_(cab.cabecalhos, 'status'),
-    dataInicio: indiceColuna_(cab.cabecalhos, 'data inicio'),
-    dataFechamento: indiceColuna_(cab.cabecalhos, 'data fechamento do risco'),
-    semana: indiceColuna_(cab.cabecalhos, 'contabilizacao semana'),
-    meta: indiceColuna_(cab.cabecalhos, 'meta acumulado'),
-    realizado: indiceColuna_(cab.cabecalhos, 'realizado acumulado')
+function getRiscosAltos(forcar) {
+  var vazio = {
+    erro: null, riscos: [], porStatus: {}, porStatusLinhas: {}, porArea: {},
+    porMacroTema: {}, porValidado: {}, serieSemanal: [], orcamentoTotal: 0,
+    quantidadeTotal: 0, linhasSemQuantidade: 0, totalLinhas: 0, totalRiscos: 0
   };
 
-  var riscos = [];
+  try {
+    if (!forcar) {
+      var cacheado = cacheLerGrande_(RISCOS_CACHE_CHAVE_);
+      if (cacheado) return cacheado;
+    }
+
+    var planilha = SpreadsheetApp.openById(RISCOS_SPREADSHEET_ID);
+    var aba = planilha.getSheetByName(RISCOS_ABA_);
+    if (!aba) throw new Error('Aba "' + RISCOS_ABA_ + '" não encontrada na planilha Riscos Altos EHS.');
+
+    var cab = localizarLinhaCabecalho_(aba, 8);
+    var ultimaLinha = aba.getLastRow();
+    var ultimaColuna = aba.getLastColumn();
+
+    var col = {
+      ranking: indiceColuna_(cab.cabecalhos, 'ranking risco'),
+      area: indiceColuna_(cab.cabecalhos, 'area'),
+      macroTema: indiceColuna_(cab.cabecalhos, 'macro tema'),
+      risco: indiceColuna_(cab.cabecalhos, 'risco'),
+      planoAcao: indiceColuna_(cab.cabecalhos, 'plano de acao'),
+      quantidade: indiceColuna_(cab.cabecalhos, 'quantidade'),
+      orcamento: indiceColuna_(cab.cabecalhos, 'orcamento'),
+      validado: indiceColuna_(cab.cabecalhos, 'validado ehs'),
+      status: indiceColuna_(cab.cabecalhos, 'status'),
+      dataInicio: indiceColuna_(cab.cabecalhos, 'data inicio'),
+      dataFechamento: indiceColuna_(cab.cabecalhos, 'data fechamento do risco'),
+      semana: indiceColuna_(cab.cabecalhos, 'contabilizacao semana'),
+      meta: indiceColuna_(cab.cabecalhos, 'meta acumulado'),
+      realizado: indiceColuna_(cab.cabecalhos, 'realizado acumulado')
+    };
+
+    var faltando = RISCOS_COLUNAS_OBRIGATORIAS_.filter(function (c) { return col[c.chave] < 0; });
+    if (faltando.length) {
+      throw new Error('Coluna(s) obrigatória(s) não encontrada(s) na aba "' + RISCOS_ABA_ + '": ' +
+        faltando.map(function (c) { return c.rotulo; }).join(', '));
+    }
+
+    var riscos = [];
   var porStatus = {};        // pesado por Quantidade
   var porStatusLinhas = {};  // contagem de linhas, só pra sub-linha/diagnóstico
   var porArea = {};          // pesado por Quantidade
@@ -3326,26 +3397,40 @@ function getRiscosAltos() {
         dataFechamento: formatarDataBr_(linha[col.dataFechamento], fuso)
       });
     });
-  }
+    }
 
-  return {
-    riscos: riscos,
-    // ATENÇÃO: porStatus/porArea/porMacroTema/porValidado somam QUANTIDADE
-    // (itens), não linhas. Quem precisa de linha usa porStatusLinhas/totalLinhas.
-    porStatus: porStatus,
-    porStatusLinhas: porStatusLinhas,
-    porArea: porArea,
-    porMacroTema: porMacroTema,
-    porValidado: porValidado,
-    serieSemanal: serieSemanal,
-    orcamentoTotal: orcamentoTotal,
-    quantidadeTotal: quantidadeTotal,
-    linhasSemQuantidade: linhasSemQuantidade,
-    totalLinhas: riscos.length,
-    // Mantido pelo nome antigo pra não quebrar nada que ainda leia daqui, mas
-    // agora vale LINHAS explicitamente — o total exibido é quantidadeTotal.
-    totalRiscos: riscos.length
-  };
+    var resultado = {
+      erro: null,
+      riscos: riscos,
+      // ATENÇÃO: porStatus/porArea/porMacroTema/porValidado somam QUANTIDADE
+      // (itens), não linhas. Quem precisa de linha usa porStatusLinhas/totalLinhas.
+      porStatus: porStatus,
+      porStatusLinhas: porStatusLinhas,
+      porArea: porArea,
+      porMacroTema: porMacroTema,
+      porValidado: porValidado,
+      serieSemanal: serieSemanal,
+      orcamentoTotal: orcamentoTotal,
+      quantidadeTotal: quantidadeTotal,
+      linhasSemQuantidade: linhasSemQuantidade,
+      totalLinhas: riscos.length,
+      // Mantido pelo nome antigo pra não quebrar nada que ainda leia daqui, mas
+      // agora vale LINHAS explicitamente — o total exibido é quantidadeTotal.
+      totalRiscos: riscos.length
+    };
+
+    try {
+      cacheGravarGrande_(RISCOS_CACHE_CHAVE_, resultado, CACHE_SEGUNDOS_6H_);
+    } catch (eCache) {
+      // Falha ao cachear não pode derrubar o card — só fica mais lento.
+    }
+
+    return resultado;
+
+  } catch (e) {
+    vazio.erro = String(e && e.message ? e.message : e);
+    return vazio;
+  }
 }
 
 function formatarDataBr_(valor, fuso) {
@@ -4200,14 +4285,39 @@ var OL_TAXAS_LINHA_ = 162;
 var OL_TAXAS_COLUNA_REC_ = 49; // AW
 
 /** Aceita número, "0,177" (padrão BR) e "0.177"; devolve null no resto. */
-function olTaxasNumero_(valor) {
+/**
+ * Parser único de número/percentual BR (substitui as implementações antes
+ * duplicadas em `olTaxasNumero_` e `farolSafParsePercentual_`, que faziam
+ * o mesmo replace(',', '.') com regras sutilmente diferentes).
+ *
+ * `opcoes.normalizarFracao`: trata 0 < n <= 1 como fração (0,177 -> 17.7).
+ * `opcoes.casasDecimais`: arredonda pro número de casas indicado.
+ */
+function parseNumeroBr_(valor, opcoes) {
   if (valor === null || valor === undefined || valor === '') return null;
-  if (typeof valor === 'number') return isFinite(valor) ? valor : null;
 
-  var texto = String(valor).trim().replace('%', '').replace(',', '.');
-  if (!texto) return null;
-  var n = Number(texto);
-  return isFinite(n) ? n : null;
+  var numero;
+  if (typeof valor === 'number') {
+    numero = valor;
+  } else {
+    var texto = String(valor).trim().replace('%', '').replace(/\s/g, '').replace(',', '.');
+    if (!texto) return null;
+    numero = Number(texto);
+  }
+  if (!isFinite(numero)) return null;
+
+  opcoes = opcoes || {};
+  if (opcoes.normalizarFracao && numero > 0 && numero <= 1) numero = numero * 100;
+  if (typeof opcoes.casasDecimais === 'number') {
+    var fator = Math.pow(10, opcoes.casasDecimais);
+    numero = Math.round(numero * fator) / fator;
+  }
+  return numero;
+}
+
+/** @deprecated use `parseNumeroBr_` diretamente. Mantida como alias fino para não alterar todos os call sites de uma vez. */
+function olTaxasNumero_(valor) {
+  return parseNumeroBr_(valor);
 }
 
 /**
@@ -4337,6 +4447,26 @@ function montarResumoHome_(ano, anosDisponiveis, cruz) {
     acumulado = obterAcumuladoPlanta_(ano);
   } catch (e) {
     acumuladoErro = String(e && e.message ? e.message : e);
+  }
+
+  // Major Actions (Rotina do Pilar): reaproveita o cache do ATS — mesma fonte
+  // que a aba ATS do painel METRICS SAF, então não gera leitura extra de
+  // planilha fora do TTL normal. NUNCA lança: sem Major Action encontrada
+  // (coluna J = "Major"), o card mostra "fonte não configurada" em vez de 0/0.
+  var majorActions = null;
+  try {
+    var atsParaMajor = getAtsAbertos();
+    var maj = atsParaMajor && !atsParaMajor.erro ? atsParaMajor.majorActions : null;
+    if (maj && maj.total > 0) {
+      var pctFechadas = Math.round((maj.fechadas / maj.total) * 100);
+      majorActions = {
+        valor: pctFechadas + '%',
+        detalhe: maj.fechadas + ' de ' + maj.total + ' fechadas',
+        status: maj.fechadas === maj.total ? 'bom' : 'atencao'
+      };
+    }
+  } catch (e) {
+    majorActions = null;
   }
 
   var meses = [];
@@ -4487,19 +4617,17 @@ metas: {
       aba: acumulado.aba,
       erro: null
     } : { erro: acumuladoErro || 'Fonte indisponível' },
-    // Acompanhamento da rotina do pilar (Major Actions/ATS, Cultura Bradley,
-    // Expansão S3/S4). NÃO existe no Scorecard Manufatura LAR — as 49 abas do
-    // workbook foram varridas e nenhuma traz esses indicadores. Fica declarado
-    // como fonte pendente para a tela mostrar o estado "aguardando fonte" em
-    // vez de inventar número.
+    // Acompanhamento da rotina do pilar (Major Actions/ATS, Expansão S3/S4).
+    // Expansão S3 / Extensão S4 carregam a META decidida na reunião com a
+    // Beatriz; o REALIZADO continua sem fonte — ver META_ROTINA_.
     //
-    // Expansão S3 / Extensão S4 passaram a carregar a META decidida na reunião
-    // com a Beatriz. O REALIZADO continua sem fonte — ver META_ROTINA_.
+    // "Cultura de Segurança" (curva de Bradley) foi RETIRADA deste card em
+    // 2026-09-20 a pedido do time de EHS (nunca teve fonte real — era sempre
+    // null/mock) — ver pauta de pendências do site.
     rotina: {
       fonte: 'nao_configurada',
-      majorActions: null, // Substituído na interface
+      majorActions: majorActions,
       dojo: obterResumoDojo_(),
-      bradley: null,
       expansaoS3: { meta: META_EXPANSAO_S3_, realizado: null, origemMeta: META_ROTINA_ORIGEM_ },
       extensaoS4: { meta: META_EXTENSAO_S4_, realizado: null, origemMeta: META_ROTINA_ORIGEM_ }
     },
@@ -5988,12 +6116,19 @@ var ATS_CACHE_SEGUNDOS_ = CACHE_SEGUNDOS_6H_;
 
 var ATS_CABECALHOS_ = {
   responsavel: 'Responsible Person',        // coluna E no dicionário
-  area: 'Area',                             // coluna T — linha/área exata
+  macro: 'Dept',                            // coluna S — departamento fabril (macro)
+  area: 'Area',                             // coluna T — linha/área exata (micro)
+  tipoAcao: 'Action Type',                  // coluna J — Minor / Major / Good Management Practice
   status: 'Action Status',                  // coluna AI
   diasAberto: 'Days Open / To Close',       // coluna AW
   diasAtraso: 'Days Past Closure Due',      // coluna AX — positivo = atrasado
   descricao: 'Action Description'           // coluna AA — o que precisa ser feito
 };
+
+// Valor literal da coluna "Action Type" (J) que identifica uma Major Action,
+// conforme dicionário de dados da aba ATS (2026-09-20): coluna J classifica
+// "o grau de impacto da ação" em Minor / Major / Good Management Practice.
+var ATS_TIPO_MAJOR_ = 'major';
 
 // Teto de registros guardados por responsável. Protege o tamanho do cache: a
 // descrição é texto livre e pode ser longa. O feed lateral nunca mostraria
@@ -6105,7 +6240,8 @@ function getAtsAbertos(forcar) {
     erro: null, total: 0, aberto: 0, vencido: 0,
     porResponsavel: [], porGerente: [], porArea: [], topAtrasos: [],
     linhasLidas: 0, semResponsavel: 0, semGerente: 0, pessoasMapeadas: 0,
-    hierarquia: { total: 0, erro: null }
+    hierarquia: { total: 0, erro: null },
+    majorActions: { total: 0, fechadas: 0 }
   };
 
   try {
@@ -6129,12 +6265,16 @@ function getAtsAbertos(forcar) {
 
     // Lê só até a última coluna que interessa, não a planilha inteira (são 50
     // colunas e boa parte é texto longo: Update History, descrições).
-    var colMax = Math.max(idx.responsavel, idx.area, idx.status, idx.diasAberto, idx.diasAtraso, idx.descricao) + 1;
+    var colMax = Math.max(idx.responsavel, idx.macro, idx.area, idx.tipoAcao, idx.status, idx.diasAberto, idx.diasAtraso, idx.descricao) + 1;
     var dados = aba.getRange(2, 1, ultimaLinha - 1, colMax).getValues();
 
     var porNome = {}, porGerente = {}, porArea = {};
     var aberto = 0, vencido = 0, semResponsavel = 0, semGerente = 0;
     var atrasos = [];
+    // Major Actions (Home): conta TODAS as linhas com Action Type = "Major",
+    // abertas ou fechadas — por isso é apurado à parte do resto desta função,
+    // que só olha pra carteira ABERTA (classificarStatusAts_ descarta fechado).
+    var majorTotal = 0, majorFechadas = 0;
 
     function acumular_(mapa, chave, classe) {
       if (!mapa[chave]) mapa[chave] = { nome: chave, aberto: 0, vencido: 0, total: 0 };
@@ -6143,6 +6283,12 @@ function getAtsAbertos(forcar) {
     }
 
     dados.forEach(function (linha) {
+      if (normalizarChaveTexto_(linha[idx.tipoAcao]) === ATS_TIPO_MAJOR_) {
+        majorTotal++;
+        var statusMajor = normalizarChaveTexto_(linha[idx.status]);
+        if (statusMajor === 'closed' || statusMajor === 'closed past due') majorFechadas++;
+      }
+
       var classe = classificarStatusAts_(linha[idx.status]);
       if (!classe) return;   // fechado, ou status desconhecido
 
@@ -6169,7 +6315,9 @@ function getAtsAbertos(forcar) {
       if (porNome[nome].registros.length < ATS_MAX_REGISTROS_) {
         porNome[nome].registros.push({
           descricao: String(linha[idx.descricao] || '').trim() || 'Sem descrição da ação',
+          macro: String(linha[idx.macro] || '').trim() || 'Não informado',
           area: area,
+          tipoAcao: String(linha[idx.tipoAcao] || '').trim() || 'Não informado',
           status: classe,   // 'aberto' | 'vencido'
           diasAtraso: Math.round(Number(linha[idx.diasAtraso]) || 0),
           diasAberto: Math.round(Number(linha[idx.diasAberto]) || 0)
@@ -6231,7 +6379,10 @@ function getAtsAbertos(forcar) {
       linhasLidas: dados.length,
       semResponsavel: semResponsavel,
       semGerente: semGerente,
-      pessoasMapeadas: pessoas.total
+      pessoasMapeadas: pessoas.total,
+      // Major Actions (coluna J = Action Type = "Major"): total x fechadas,
+      // independente de aberto/vencido — usado pelo KPI "Major Actions" da Home.
+      majorActions: { total: majorTotal, fechadas: majorFechadas }
     };
 
     cacheGravarGrande_(ATS_CACHE_CHAVE_, resultado, ATS_CACHE_SEGUNDOS_);
@@ -6313,8 +6464,26 @@ var OCORRENCIAS_PAINEL_CABECALHOS_ = {
   // menos 1", e o catch devolvia { erro } para os dois cards de Investigações.
   areaMacro: 'Employee Dept, Area (WHERE)',
   bodyPart: 'Body Part',              // coluna BM
-  followUp: 'Follow-up Status'        // coluna CL
+  followUp: 'Follow-up Status',       // coluna CL
+  // Adicionadas em 2026-09-20 pra classificar cada linha em
+  // comAfastamento/semAfastamento/primeirosSocorros — MESMO critério (v5) já
+  // usado pelo Boneco (ver ehRecordable/comAfastamento em
+  // getPartesDoCorpoAnoCompleto). Pauta de pendências do site: colorir o
+  // Pareto por Gerente por tipo de ocorrência.
+  dafw: 'Inj. DAFW?',
+  locallyReportable: 'Locally Reportable?'
 };
+
+// Classifica uma linha nas 3 categorias mutuamente exclusivas do Boneco
+// (mesma regra v5: ehRecordable = "Locally Reportable?" === yes). Reusada
+// pelo Pareto por Gerente pra colorir as barras com o MESMO padrão visual já
+// em uso no filtro do Boneco (Com afastamento / Sem afastamento / Primeiros
+// socorros) — pedido do time de EHS, 2026-09-20.
+function tipoOcorrenciaDaLinha_(linha, idxDafw, idxLocallyReportable) {
+  var ehRecordable = normalizarTexto_(linha[idxLocallyReportable]).trim() === 'yes';
+  if (!ehRecordable) return 'primeirosSocorros';
+  return flagVerdadeiro_(linha[idxDafw]) ? 'comAfastamento' : 'semAfastamento';
+}
 
 function obterIndicesOcorrenciasPainel_(aba) {
   var cabecalhos = aba.getRange(1, 1, 1, aba.getLastColumn()).getValues()[0];
@@ -6354,16 +6523,29 @@ function ocorrenciaEmAberto_(bruto) {
  *   semGerente, totalAbertos, abertosExibidos }
  * Cada agregado é [{ nome, total }] ordenado desc.
  */
-function getOcorrenciasPainel(forcar) {
+/**
+ * `filtros` (opcional): { gerente, tipo } — tipo é 'comAfastamento' |
+ * 'semAfastamento' | 'primeirosSocorros'. Adicionado em 2026-09-20 (pauta de
+ * pendências do site). Com QUALQUER filtro ativo, a função NÃO lê nem grava o
+ * cache padrão — recalcula na hora. Sem filtro (uso normal, ~100% das
+ * chamadas), o comportamento e o cache são os de sempre. Trade-off aceito:
+ * um pouco mais lento só enquanto o usuário está filtrando.
+ */
+function getOcorrenciasPainel(forcar, filtros) {
+  filtros = filtros || {};
+  var temFiltro = !!(filtros.gerente || filtros.tipo);
+
   var vazio = {
-    erro: null, total: 0, porStatus: [], porGravidade: [], porGerente: [],
+    erro: null, total: 0, totalGeral: 0, filtros: { gerente: null, tipo: null },
+    porStatus: [], porGravidade: [], porGerente: [],
     porParteCorpo: [], porAreaStatus: [], abertos: [], periodo: { de: null, ate: null },
     linhasLidas: 0, semSupervisor: 0, semGerente: 0, totalAbertos: 0, abertosExibidos: 0,
-    hierarquia: { total: 0, erro: null }
+    hierarquia: { total: 0, erro: null },
+    gerentesDisponiveis: [], tiposDisponiveis: []
   };
 
   try {
-    if (!forcar) {
+    if (!forcar && !temFiltro) {
       var cacheado = cacheLerGrande_(OCORRENCIAS_PAINEL_CACHE_CHAVE_);
       if (cacheado) return cacheado;
     }
@@ -6405,6 +6587,9 @@ function getOcorrenciasPainel(forcar) {
     var abertos = [];
     var semSupervisor = 0, semGerente = 0, totalAbertos = 0;
     var maisAntiga = null, maisNova = null;
+    var gerentesVistos = {}, tiposVistos = {};
+    var linhasConsideradas = 0;
+    var filtroGerenteNorm = filtros.gerente ? normalizarChaveTexto_(filtros.gerente) : null;
 
     function contar_(mapa, chave) {
       var k = String(chave || '').trim() || 'Não informado';
@@ -6412,19 +6597,43 @@ function getOcorrenciasPainel(forcar) {
       return k;
     }
 
+    // Soma NA MESMA linha o total e o sub-total por tipo (comAfastamento/
+    // semAfastamento/primeirosSocorros) — é o que deixa o Pareto por Gerente
+    // colorir a barra por tipo, igual ao filtro do Boneco.
+    function contarPorTipo_(mapa, chave, tipo) {
+      var k = String(chave || '').trim() || 'Não informado';
+      if (!mapa[k]) mapa[k] = { total: 0, comAfastamento: 0, semAfastamento: 0, primeirosSocorros: 0 };
+      mapa[k].total++;
+      mapa[k][tipo]++;
+      return k;
+    }
+
     dados.forEach(function (linha) {
       var supervisor = String(linha[idx.supervisor] || '').trim();
-      if (!supervisor) { supervisor = 'Não informado'; semSupervisor++; }
+      if (!supervisor) { supervisor = 'Não informado'; }
 
       // Join com a hierarquia. Sem correspondência vira balde próprio, nunca
       // some — senão a soma dos gerentes não fecharia com o total.
       var ficha = pessoas.mapa[normalizarChaveTexto_(supervisor)];
       var gerente = (ficha && ficha.gerente) ? ficha.gerente : 'Sem gerente mapeado';
+      var tipo = tipoOcorrenciaDaLinha_(linha, idx.dafw, idx.locallyReportable);
+
+      // Listas pra popular os selects do frontend: sempre coletadas, mesmo em
+      // linha que o filtro vai descartar depois — senão o select "esquece"
+      // opções que ficariam fora do recorte atual.
+      gerentesVistos[gerente] = true;
+      tiposVistos[tipo] = true;
+
+      if (filtroGerenteNorm && normalizarChaveTexto_(gerente) !== filtroGerenteNorm) return;
+      if (filtros.tipo && filtros.tipo !== tipo) return;
+
+      linhasConsideradas++;
+      if (supervisor === 'Não informado') semSupervisor++;
       if (!ficha || !ficha.gerente) semGerente++;
 
       var rotuloStatus = contar_(status, linha[idx.followUp]);
       contar_(gravidade, linha[idx.extent]);
-      contar_(gerentes, gerente);
+      contarPorTipo_(gerentes, gerente, tipo);
       contar_(partes, linha[idx.bodyPart]);
 
       var areaBrutaLinha = String(linha[idx.areaMacro] || '').trim();
@@ -6466,14 +6675,32 @@ function getOcorrenciasPainel(forcar) {
         .sort(function (a, b) { return (b.total - a.total) || a.nome.localeCompare(b.nome, 'pt-BR'); });
     }
 
+    // Mesma ordenação de ordenar_, mas pra mapa de OBJETOS {total, ...tipos} em
+    // vez de número puro — usado só por porGerente, que carrega a quebra por
+    // tipo de ocorrência pra colorir a barra.
+    function ordenarComTipos_(mapa) {
+      return Object.keys(mapa).map(function (k) {
+        var v = mapa[k];
+        return {
+          nome: k, total: v.total,
+          comAfastamento: v.comAfastamento, semAfastamento: v.semAfastamento,
+          primeirosSocorros: v.primeirosSocorros
+        };
+      }).sort(function (a, b) { return (b.total - a.total) || a.nome.localeCompare(b.nome, 'pt-BR'); });
+    }
+
     abertos.sort(function (a, b) { return b.ordem - a.ordem; });   // mais recente primeiro
 
     var resultado = {
       erro: null,
-      total: dados.length,
+      total: linhasConsideradas,
+      totalGeral: dados.length,
+      filtros: { gerente: filtros.gerente || null, tipo: filtros.tipo || null },
+      gerentesDisponiveis: Object.keys(gerentesVistos).sort(function (a, b) { return a.localeCompare(b, 'pt-BR'); }),
+      tiposDisponiveis: Object.keys(tiposVistos),
       porStatus: ordenar_(status),
       porGravidade: ordenar_(gravidade),
-      porGerente: ordenar_(gerentes),
+      porGerente: ordenarComTipos_(gerentes),
       porParteCorpo: ordenar_(partes).slice(0, OCORRENCIAS_PAINEL_TOP_CORPO_),
       // Pareto por área, já ordenado por total desc: [{ area, total, status: {rótulo: n} }]
       porAreaStatus: Object.keys(porAreaStatus).map(function (area) {
@@ -6498,7 +6725,13 @@ function getOcorrenciasPainel(forcar) {
       abertosExibidos: abertos.length
     };
 
-    cacheGravarGrande_(OCORRENCIAS_PAINEL_CACHE_CHAVE_, resultado, CACHE_SEGUNDOS_6H_);
+    if (!temFiltro) {
+      try {
+        cacheGravarGrande_(OCORRENCIAS_PAINEL_CACHE_CHAVE_, resultado, CACHE_SEGUNDOS_6H_);
+      } catch (eCache) {
+        // segue com o payload em mãos — falha ao cachear não pode derrubar o card
+      }
+    }
     return resultado;
 
   } catch (e) {
@@ -7624,8 +7857,8 @@ function debugCriterioRecordable() {
  */
 function debugTagSafRelatos() {
   var planilha = SpreadsheetApp.openById(TAG_SAF_SPREADSHEET_ID);
-  var aba = planilha.getSheetByName('BASE TAG - SAF');
-  if (!aba) throw new Error('Aba "BASE TAG - SAF" não encontrada.');
+  var aba = planilha.getSheetByName(TAG_SAF_ABA_);
+  if (!aba) throw new Error('Aba "' + TAG_SAF_ABA_ + '" não encontrada.');
 
   var ultimaLinha = aba.getLastRow();
   var cabecalhos = aba.getRange(1, 1, 1, aba.getLastColumn()).getValues()[0];
@@ -7874,19 +8107,9 @@ function obterIndicesSafAuditoria_(aba) {
  * 4 de março (mês/dia, convenção americana) e o cálculo de atraso sairia
  * errado por até 11 meses sem nenhum sintoma visível.
  */
+/** @deprecated use `parseDataBr_` diretamente. Mantida como alias fino para não alterar todos os call sites de uma vez. */
 function safParseData_(valor) {
-  if (valor instanceof Date) return isNaN(valor.getTime()) ? null : valor;
-
-  var texto = String(valor == null ? '' : valor).trim();
-  if (!texto) return null;
-
-  var m = texto.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);        // dd/mm/aaaa
-  if (m) return new Date(Number(m[3]), Number(m[2]) - 1, Number(m[1]));
-
-  m = texto.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);              // aaaa-mm-dd
-  if (m) return new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
-
-  return null;
+  return parseDataBr_(valor);
 }
 
 /** Data -> 'aaaa-mm-dd' no fuso da planilha, ou null. Formato serializável. */
@@ -8884,20 +9107,9 @@ function farolSafLetraColuna_(indice) {
   return letra;
 }
 
+/** @deprecated use `parseNumeroBr_` diretamente. Mantida como alias fino para não alterar todos os call sites de uma vez. */
 function farolSafParsePercentual_(valor) {
-  if (valor === null || valor === undefined || valor === '') return null;
-
-  var numero;
-  if (typeof valor === 'number') {
-    numero = valor;
-  } else {
-    var t = String(valor).replace('%', '').replace(/\s/g, '').replace(',', '.');
-    numero = Number(t);
-  }
-  if (isNaN(numero)) return null;
-
-  if (numero > 0 && numero <= 1) numero = numero * 100;
-  return Math.round(numero * 100) / 100;
+  return parseNumeroBr_(valor, { normalizarFracao: true, casasDecimais: 2 });
 }
 
 /**
@@ -9163,4 +9375,375 @@ function debugFarolSaf() {
   Logger.log('  jan..dez: ' + r.mesesReal.join(' | '));
 
   return r;
+}
+
+/* ============================================================================
+ * APONTAMENTOS (reconstrução) — planilha nova, aba "BASE DE ENVIO"
+ *
+ * Substitui, quando validado, as três telas que hoje leem "Base TAG SAF"
+ * (obterTotaisTagSaf_/obterTagSafety_): a aba Apontamentos do METRICS SAF,
+ * o KPI "TAGs registradas" da Home e a Pirâmide de Segurança. Ver spec em
+ * docs/superpowers/specs/2026-09-20-apontamentos-rebuild-design.md.
+ *
+ * BASE DE ENVIO já vem CONSOLIDADA por um processo fora do Code.gs (script
+ * ou trabalho manual da equipe) — aqui só LEMOS, nunca recalculamos nem
+ * geramos essa base. As abas "Respostas ao formulário", "Listas" e "Turno
+ * x Responsáveis" da mesma planilha NÃO são usadas por este módulo — ficam
+ * reservadas para o Projeto B (Prudêncio lançando TAG por conversa).
+ *
+ * 2026-09-20: cabeçalho de BASE DE ENVIO confirmado colado direto da
+ * planilha viva pelo usuário (33 colunas, A–AG) — não é suposição.
+ * ============================================================================ */
+
+var APONTAMENTOS_NOVO_SPREADSHEET_ID_ = '1or9ddLm44pMYkh5E-rvfHBY38ikMku2Ixzzm2Km12fY';
+var APONTAMENTOS_NOVO_ABA_ = 'BASE DE ENVIO';
+var APONTAMENTOS_NOVO_CACHE_CHAVE_ = 'apontamentosNovo_v1';
+
+var APONTAMENTOS_NOVO_CABECALHOS_ = {
+  data: 'DATA',
+  re: 'RE',
+  turno: 'TURNO',
+  areaRelator: 'ÁREA DO RELATOR',
+  tag: 'TAG',
+  numeroTag: 'Nº TAG',
+  pilarTag: 'PILAR TAG',
+  classificacao: 'CLASSIFICAÇÃO',
+  areaDesvio: 'ÁREA DO DESVIO',
+  localDetalhado: 'LOCAL DETALHADO',
+  descricaoEvento: 'DESCRIÇÃO DO EVENTO',
+  acaoImediata: 'AÇÃO IMEDIATA',
+  probabilidade: 'PROBABILIDADE',
+  gravidade: 'GRAVIDADE',
+  relacaoAtoInseguro: 'RELACAO ATO INSEGURO',
+  reEnvolvido: 'RE ENVOLVIDO',
+  nomeEnvolvido: 'NOME ENVOLVIDO',
+  prioridadeTag: 'PRIORIDADE TAG',
+  htmlClassificacao: 'HTML CLASSIFICAÇÃO',
+  areaGensuite: 'ÁREA GENSUITE',
+  departamentoGensuite: 'DEPARTAMENTO GENSUITE',
+  atividadePrincipal: 'ATIVIDADE PRINCIPAL',
+  supervisorGensuite: 'SUPERVISOR GENSUITE',
+  emailSupervisor: 'EMAIL SUPERVISOR',
+  lancadoGensuite: 'LANÇADO GENSUITE',
+  dataLancamentoGensuite: 'DATA LANÇAMENTO GENSUITE',
+  numeroGensuite: 'Nº GENSUITE',
+  solicitadoFechamento: 'SOLICITADO FECHAMENTO',
+  dataSolicitacaoFechamento: 'DATA SOLICITAÇÃO FECHAMENTO',
+  solicitanteFechamento: 'SOLICITANTE FECHAMENTO',
+  fechadoGensuite: 'FECHADO GENSUITE',
+  dataFechamentoGensuite: 'DATA FECHAMENTO GENSUITE',
+  idUnico: 'ID_UNICO'
+};
+
+/**
+ * Resolve APONTAMENTOS_NOVO_CABECALHOS_ pros índices reais (0-based) da
+ * aba. Lança erro explícito e NOMEADO se alguma coluna sumir — mesmo
+ * padrão de obterIndicesOcorrencias_/obterIndicesAts_, pra um cabeçalho
+ * renomeado quebrar alto e claro em vez de ler a coluna errada calado.
+ */
+function obterIndicesApontamentosNovo_(aba) {
+  var cabecalhos = aba.getRange(1, 1, 1, aba.getLastColumn()).getValues()[0];
+  var mapa = {};
+  cabecalhos.forEach(function (nome, i) {
+    var chave = String(nome || '').trim();
+    if (chave && !(chave in mapa)) mapa[chave] = i;
+  });
+
+  var idx = {};
+  var faltando = [];
+  Object.keys(APONTAMENTOS_NOVO_CABECALHOS_).forEach(function (chaveInterna) {
+    var nomeReal = APONTAMENTOS_NOVO_CABECALHOS_[chaveInterna];
+    if (nomeReal in mapa) {
+      idx[chaveInterna] = mapa[nomeReal];
+    } else {
+      faltando.push(nomeReal);
+    }
+  });
+
+  if (faltando.length) {
+    throw new Error('Coluna(s) não encontrada(s) na aba "' + APONTAMENTOS_NOVO_ABA_ +
+      '": ' + faltando.join(', ') + '. Confira a linha 1 da planilha.');
+  }
+  return idx;
+}
+
+/**
+ * DIAGNÓSTICO — roda no editor ANTES de escrever a agregação "por tipo de
+ * relato" de getApontamentosNovo_. Não existe coluna óbvia "TIPO" na BASE
+ * DE ENVIO batendo com os 5 tipos reais achados em "Respostas ao
+ * formulário" (ATOS INSEGUROS.../SEGURANÇA - VER E AGIR/TAG - SAF -
+ * Safety/ATOS SEGUROS/TAG - ENV - Environment — ver spec, seção 3.3).
+ *
+ * Esta função amostra a BASE DE ENVIO viva e reporta a distribuição de
+ * cada coluna CANDIDATA a distinguir o tipo, pra decisão ser tomada com
+ * dado real — mesmo espírito de debugDatasOcorrencias/debugStatusAts.
+ */
+function debugApontamentosNovo_() {
+  var planilha = SpreadsheetApp.openById(APONTAMENTOS_NOVO_SPREADSHEET_ID_);
+  var aba = localizarAbaTolerante_(planilha, APONTAMENTOS_NOVO_ABA_);
+  if (!aba) return debugLogar_('Aba "' + APONTAMENTOS_NOVO_ABA_ + '" não encontrada.');
+
+  var idx = obterIndicesApontamentosNovo_(aba);
+  var ultimaLinha = aba.getLastRow();
+  if (ultimaLinha < 2) return debugLogar_('Aba vazia.');
+
+  var colMax = colunasNecessarias_(idx, 'debugApontamentosNovo_');
+  var dados = aba.getRange(2, 1, ultimaLinha - 1, colMax).getValues();
+
+  Logger.log('=== BASE DE ENVIO — ' + dados.length + ' linha(s) lidas ===');
+
+  function contarDistintos_(campo, rotulo) {
+    var contagem = {};
+    dados.forEach(function (linha) {
+      var v = String(linha[idx[campo]] == null ? '' : linha[idx[campo]]).trim();
+      var chave = v || '(vazio)';
+      contagem[chave] = (contagem[chave] || 0) + 1;
+    });
+    var ordenado = Object.keys(contagem).map(function (k) { return { nome: k, total: contagem[k] }; })
+      .sort(function (a, b) { return b.total - a.total; });
+    Logger.log('--- ' + rotulo + ' (' + ordenado.length + ' valor(es) distinto(s)) ---');
+    ordenado.slice(0, 20).forEach(function (o) { Logger.log('  "' + o.nome + '" -> ' + o.total); });
+    if (ordenado.length > 20) Logger.log('  ... (+' + (ordenado.length - 20) + ' outros valores)');
+  }
+
+  // Candidatas a "tipo de relato": ver spec 3.3. `classificacao` pode ser
+  // risco (Muito Alto/Médio/Baixo, igual a "Classificação SAF" em Listas)
+  // em vez de tipo — é exatamente isso que esta função existe pra revelar.
+  contarDistintos_('classificacao', 'CLASSIFICAÇÃO');
+  contarDistintos_('relacaoAtoInseguro', 'RELACAO ATO INSEGURO');
+  contarDistintos_('pilarTag', 'PILAR TAG');
+  contarDistintos_('tag', 'TAG (coluna E)');
+
+  // Presença/ausência: se RE ENVOLVIDO só vier preenchido numa fatia das
+  // linhas, essa fatia provavelmente é "envolve terceiro" (ato inseguro ou
+  // ato seguro) — mesma técnica que resolveu a ambiguidade em "Respostas
+  // ao formulário" nesta sessão, aplicada aqui à base consolidada.
+  var comEnvolvido = 0, semEnvolvido = 0;
+  dados.forEach(function (linha) {
+    var v = String(linha[idx.reEnvolvido] || linha[idx.nomeEnvolvido] || '').trim();
+    if (v) comEnvolvido++; else semEnvolvido++;
+  });
+  Logger.log('--- RE/NOME ENVOLVIDO preenchido? ---');
+  Logger.log('  com envolvido: ' + comEnvolvido + '   sem envolvido: ' + semEnvolvido);
+
+  // Cruzamento CLASSIFICAÇÃO x presença de envolvido: se cada valor de
+  // CLASSIFICAÇÃO cair limpo num dos dois grupos, é sinal forte de que
+  // CLASSIFICAÇÃO (ou uma combinação com isto) carrega o tipo.
+  var cruzamento = {};
+  dados.forEach(function (linha) {
+    var cls = String(linha[idx.classificacao] || '(vazio)').trim() || '(vazio)';
+    var temEnvolvido = !!String(linha[idx.reEnvolvido] || linha[idx.nomeEnvolvido] || '').trim();
+    if (!cruzamento[cls]) cruzamento[cls] = { comEnvolvido: 0, semEnvolvido: 0 };
+    cruzamento[cls][temEnvolvido ? 'comEnvolvido' : 'semEnvolvido']++;
+  });
+  Logger.log('--- CLASSIFICAÇÃO × envolvido (primeiros 20 valores de CLASSIFICAÇÃO) ---');
+  Object.keys(cruzamento).slice(0, 20).forEach(function (cls) {
+    var c = cruzamento[cls];
+    Logger.log('  "' + cls + '" -> com envolvido: ' + c.comEnvolvido + '  ·  sem envolvido: ' + c.semEnvolvido);
+  });
+
+  Logger.log('=== FIM DO DIAGNÓSTICO — cole este log de volta pra decidirmos a lógica de tipo ===');
+  return 'ok';
+}
+
+// Teto de linhas devolvidas pra tabela de detalhamento do frontend — mesmo
+// raciocínio de OCORRENCIAS_PAINEL_MAX_ABERTOS_: protege o tamanho do cache,
+// não é teto de contagem (KPIs/paretos somam TODAS as linhas lidas).
+var APONTAMENTOS_NOVO_MAX_DETALHE_ = 300;
+
+/**
+ * "Sim"/"não" tolerante, mas SEM o default de ehSim_ (que trata célula
+ * vazia como sim — bom pra flag "ativo", péssimo aqui: célula vazia em
+ * LANÇADO/FECHADO GENSUITE significa que o estágio NÃO aconteceu ainda).
+ */
+function apontamentosNovoAfirmativo_(valor) {
+  var t = normalizarChaveTexto_(valor);
+  return t === 'sim' || t === 's' || t === 'true' || t === 'x';
+}
+
+/**
+ * Estágio do ciclo de vida — 4 valores mutuamente exclusivos, nessa ordem
+ * de precedência (uma TAG fechada pode ter passado por todos os outros
+ * estágios, mas o que importa pro funil é onde ela ESTÁ agora).
+ */
+function apontamentosNovoEstagio_(fechado, solicitadoFechamento, lancado) {
+  if (fechado) return 'fechada';
+  if (solicitadoFechamento) return 'fechamentoSolicitado';
+  if (lancado) return 'lancada';
+  return 'aberta';
+}
+
+var APONTAMENTOS_NOVO_ESTAGIOS_ = [
+  { chave: 'aberta', rotulo: 'Aberta' },
+  { chave: 'lancada', rotulo: 'Lançada no Gensuite' },
+  { chave: 'fechamentoSolicitado', rotulo: 'Fechamento solicitado' },
+  { chave: 'fechada', rotulo: 'Fechada' }
+];
+
+/**
+ * Lê BASE DE ENVIO e devolve o pacote inteiro da aba Apontamentos nova
+ * (KPIs, funil, paretos, tendência mensal, tabela de detalhamento).
+ * NUNCA LANÇA — mesmo padrão de getFarolSaf/getAtsAbertos/getRiscosAltos:
+ * devolve { erro } em vez de derrubar o painel.
+ *
+ * `porTipo` fica vazio de propósito até o diagnóstico de
+ * debugApontamentosNovo_ revelar qual coluna carrega o tipo de relato (ver
+ * spec, seção 3.3) — não adivinhar aqui.
+ */
+function getApontamentosNovo_(forcar) {
+  var vazio = {
+    erro: null, totalGeral: 0,
+    kpis: { total: 0, abertas: 0, lancadas: 0, fechamentoSolicitado: 0, fechadas: 0 },
+    funil: [], porTipo: [], porSupervisor: [], porArea: [], porDepartamento: [],
+    tendenciaMensal: [], detalhamento: [], detalhamentoCortado: 0,
+    semSupervisor: 0, semArea: 0, linhasLidas: 0, periodo: { de: null, ate: null }
+  };
+
+  try {
+    if (!forcar) {
+      var cacheado = cacheLerGrande_(APONTAMENTOS_NOVO_CACHE_CHAVE_);
+      if (cacheado) return cacheado;
+    }
+
+    var planilha = SpreadsheetApp.openById(APONTAMENTOS_NOVO_SPREADSHEET_ID_);
+    var aba = localizarAbaTolerante_(planilha, APONTAMENTOS_NOVO_ABA_);
+    if (!aba) throw new Error('Aba "' + APONTAMENTOS_NOVO_ABA_ + '" não encontrada.');
+
+    var idx = obterIndicesApontamentosNovo_(aba);
+    var ultimaLinha = aba.getLastRow();
+    if (ultimaLinha < 2) return vazio;
+
+    var fuso = planilha.getSpreadsheetTimeZone();
+    var colMax = colunasNecessarias_(idx, 'getApontamentosNovo_');
+    var dados = aba.getRange(2, 1, ultimaLinha - 1, colMax).getValues();
+
+    var porEstagio = { aberta: 0, lancada: 0, fechamentoSolicitado: 0, fechada: 0 };
+    var porSupervisor = {}, porArea = {}, porDepartamento = {}, porMes = {};
+    var semSupervisor = 0, semArea = 0;
+    var detalhamento = [], cortou = 0;
+    var maisAntiga = null, maisNova = null;
+    var hoje = new Date();
+
+    function acumularDuplo_(mapa, chave, fechada) {
+      var k = String(chave || '').trim() || 'Não informado';
+      if (!mapa[k]) mapa[k] = { nome: k, total: 0, abertas: 0, fechadas: 0 };
+      mapa[k].total++;
+      mapa[k][fechada ? 'fechadas' : 'abertas']++;
+    }
+    function acumularSimples_(mapa, chave) {
+      var k = String(chave || '').trim() || 'Não informado';
+      mapa[k] = (mapa[k] || 0) + 1;
+    }
+
+    dados.forEach(function (linha) {
+      var dataEvento = parseDataBr_(linha[idx.data]);
+      if (dataEvento) {
+        if (!maisAntiga || dataEvento < maisAntiga) maisAntiga = dataEvento;
+        if (!maisNova || dataEvento > maisNova) maisNova = dataEvento;
+      }
+
+      var lancado = apontamentosNovoAfirmativo_(linha[idx.lancadoGensuite]);
+      var fechamentoSolicitado = apontamentosNovoAfirmativo_(linha[idx.solicitadoFechamento]);
+      var fechado = apontamentosNovoAfirmativo_(linha[idx.fechadoGensuite]);
+      var estagio = apontamentosNovoEstagio_(fechado, fechamentoSolicitado, lancado);
+      porEstagio[estagio]++;
+
+      var supervisor = String(linha[idx.supervisorGensuite] || '').trim();
+      if (!supervisor) { supervisor = 'Sem supervisor mapeado'; semSupervisor++; }
+      acumularDuplo_(porSupervisor, supervisor, fechado);
+
+      var area = String(linha[idx.areaGensuite] || '').trim();
+      if (!area) { area = 'Não informada'; semArea++; }
+      acumularSimples_(porArea, area);
+      acumularSimples_(porDepartamento, linha[idx.departamentoGensuite]);
+
+      if (dataEvento) {
+        var chaveMes = dataEvento.getFullYear() + '-' + ('0' + (dataEvento.getMonth() + 1)).slice(-2);
+        acumularSimples_(porMes, chaveMes);
+      }
+
+      if (detalhamento.length < APONTAMENTOS_NOVO_MAX_DETALHE_) {
+        // Dias em aberto: SEM SLA inventado (spec, seção 5.2) — se já
+        // fechou, conta até a data de fechamento (duração real); se não,
+        // conta até hoje (ainda correndo). Quem lê julga o que é demorado.
+        var dataFechamento = parseDataBr_(linha[idx.dataFechamentoGensuite]);
+        var fimContagem = fechado && dataFechamento ? dataFechamento : hoje;
+        var diasEmAberto = dataEvento ? Math.max(Math.round((fimContagem - dataEvento) / 86400000), 0) : null;
+
+        detalhamento.push({
+          data: dataEvento ? Utilities.formatDate(dataEvento, fuso, 'dd/MM/yyyy') : '—',
+          ordem: dataEvento ? dataEvento.getTime() : 0,
+          re: String(linha[idx.re] || '').trim(),
+          numeroTag: String(linha[idx.numeroTag] || '').trim(),
+          pilarTag: String(linha[idx.pilarTag] || '').trim(),
+          classificacao: String(linha[idx.classificacao] || '').trim(),
+          area: area,
+          descricao: String(linha[idx.descricaoEvento] || '').trim(),
+          supervisor: supervisor,
+          prioridade: String(linha[idx.prioridadeTag] || '').trim(),
+          estagio: estagio,
+          diasEmAberto: diasEmAberto
+        });
+      } else {
+        cortou++;
+      }
+    });
+
+    var ordenarTotal_ = function (mapa) {
+      return Object.keys(mapa).map(function (k) { return mapa[k]; })
+        .sort(function (a, b) { return (b.total - a.total) || a.nome.localeCompare(b.nome, 'pt-BR'); });
+    };
+    var ordenarSimples_ = function (mapa) {
+      return Object.keys(mapa).map(function (k) { return { nome: k, total: mapa[k] }; })
+        .sort(function (a, b) { return (b.total - a.total) || a.nome.localeCompare(b.nome, 'pt-BR'); });
+    };
+
+    detalhamento.sort(function (a, b) { return b.ordem - a.ordem; });
+
+    var resultado = {
+      erro: null,
+      totalGeral: dados.length,
+      kpis: {
+        total: dados.length,
+        abertas: porEstagio.aberta,
+        lancadas: porEstagio.lancada,
+        fechamentoSolicitado: porEstagio.fechamentoSolicitado,
+        fechadas: porEstagio.fechada
+      },
+      funil: APONTAMENTOS_NOVO_ESTAGIOS_.map(function (e) {
+        return { chave: e.chave, rotulo: e.rotulo, total: porEstagio[e.chave] };
+      }),
+      // TODO (spec 3.3): plugar aqui assim que debugApontamentosNovo_ revelar
+      // a coluna/lógica certa. Fica vazio — o frontend trata vazio como
+      // "fonte não configurada", não como zero.
+      porTipo: [],
+      porSupervisor: ordenarTotal_(porSupervisor),
+      porArea: ordenarSimples_(porArea),
+      porDepartamento: ordenarSimples_(porDepartamento),
+      tendenciaMensal: Object.keys(porMes).sort().map(function (mes) {
+        return { mes: mes, total: porMes[mes] };
+      }),
+      detalhamento: detalhamento,
+      detalhamentoCortado: cortou,
+      semSupervisor: semSupervisor,
+      semArea: semArea,
+      linhasLidas: dados.length,
+      periodo: {
+        de: maisAntiga ? Utilities.formatDate(maisAntiga, fuso, 'MM/yyyy') : null,
+        ate: maisNova ? Utilities.formatDate(maisNova, fuso, 'MM/yyyy') : null
+      }
+    };
+
+    try {
+      cacheGravarGrande_(APONTAMENTOS_NOVO_CACHE_CHAVE_, resultado, CACHE_SEGUNDOS_6H_);
+    } catch (eCache) {
+      // segue com o payload em mãos — falha ao cachear não pode derrubar o card
+    }
+
+    return resultado;
+
+  } catch (e) {
+    vazio.erro = String(e && e.message ? e.message : e);
+    return vazio;
+  }
 }

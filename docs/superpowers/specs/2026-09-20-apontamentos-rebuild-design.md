@@ -23,18 +23,25 @@ confirmadas com o usuário:
 ## 2. Decisão de escopo (confirmada com o usuário)
 
 A nova fonte de dados (planilha `1or9ddLm44pMYkh5E-rvfHBY38ikMku2Ixzzm2Km12fY`,
-aba **BASE DE ENVIO**) substitui a antiga "Base TAG SAF" em **3 lugares**,
-não só na aba Apontamentos:
+aba **BASE DE ENVIO**) substitui a antiga "Base TAG SAF" em **2 lugares**:
 
 - Aba Apontamentos (reconstrução completa, este documento).
 - KPI "TAGS REGISTRADAS" da Home.
-- Pirâmide de Segurança.
+
+> **Atualizado durante a implementação (2026-09-20)**: a Pirâmide de
+> Segurança **NÃO** migra nesta leva. Ela usa 10 categorias de gravidade
+> (Fatalidade → Comportamento Inseguro) vindas da TAG SAF antiga; a BASE DE
+> ENVIO só tem `PROBABILIDADE`/`GRAVIDADE` (matriz de risco) e a lista
+> "Classificação SAF" tem só 3 níveis — granularidade incompatível sem uma
+> decisão de mapeamento própria. Decisão do usuário: manter a Pirâmide na
+> fonte antiga por agora; fica como pendência separada, não neste projeto.
 
 As funções antigas (`obterTagSafety_`, `obterTotaisTagSaf_`,
-`TAG_SAF_SPREADSHEET_ID`) saem de uso nessas 3 telas quando a migração for
-validada. Não removidas neste documento — a remoção efetiva do código morto
-fica pro plano de implementação decidir (manter como fallback até
-confirmar em produção, ou remover direto).
+`TAG_SAF_SPREADSHEET_ID`) saem de uso só na aba Apontamentos e no KPI da
+Home — a Pirâmide continua chamando o que já chamava. Nada é removido
+neste documento — a remoção efetiva de código morto fica pro plano de
+implementação decidir (manter como fallback até confirmar em produção, ou
+remover direto).
 
 ## 3. Modelo de dados
 
@@ -179,13 +186,13 @@ flowchart LR
     end
     BE -->|1 leitura| F --> K & FU & T & S & AR & TE & TB
     F -.->|mesma função, mesmo cache| Home["Home — TAGs registradas"]
-    F -.-> Pir["Pirâmide de Segurança"]
 ```
 
 Uma função, uma leitura de planilha, cache único (padrão já estabelecido
 no projeto: `cacheLerGrande_`/`cacheGravarGrande_`, TTL 6h, `forcar` para
-recarregar). Home e Pirâmide passam a chamar essa mesma função em vez de
-`obterTotaisTagSaf_`/`obterTagSafety_`.
+recarregar). A Home passa a chamar essa mesma função em vez de
+`obterTotaisTagSaf_`/`obterTagSafety_`. A Pirâmide de Segurança **não**
+migra nesta leva (ver seção 2).
 
 ## 5. Seções da página (frontend)
 
