@@ -6,6 +6,26 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>EHS Tracker</title>
 
+  <!-- FAVICON — o Prudêncio no lugar do ícone padrão do Apps Script.
+
+       Este <link> vale SÓ NO DEV-SERVER. No `/exec` o nosso HTML roda DENTRO DE
+       UM IFRAME e a aba do navegador pertence à página de FORA, do Google —
+       nenhum <link> daqui a alcança. Lá quem manda é `setFaviconUrl()` no doGet,
+       que exige uma URL http(s) DE VERDADE (data: URI foi testado em 26/08/2026
+       e NÃO funciona). Por isso o Code.js publica esta mesma arte no Drive.
+
+       A string base64 abaixo é IDÊNTICA a PRUDENCIO_FAVICON_PNG_B64_ no
+       Code.js, e há teste exigindo isso — duas cópias da arte que divergem dão
+       ícones diferentes conforme o ambiente, e ninguém procura esse bug.
+
+       PNG e não SVG: `setFaviconUrl` emite um <link> sem `type`, e sem ele o
+       navegador não trata SVG como ícone de forma confiável. São 611 bytes.
+
+       A arte NÃO é o mascote do botão: a 16px os olhos dele (r=7.6 num viewBox
+       de 120) dariam ~1px. Esta versão tem cruz com menos margem, olhos maiores
+       e sem boca (a 16px o sorriso vira mancha). Conferida a 16/24/32/64px. -->
+  <link rel="icon" type="image/png" href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAYAAACqaXHeAAACKklEQVR42u3bP0tCURgGcL+BYxDlB5DCsYgGl/6gtARFW0I1tAi1FC5JEA5BBtEkbdVQQQQOBYZDlBC0VNKmhBG0VEbQeOKRlNvxer10j3qk54UDwuWFe36+5z33XNHlYjgPd8Dndwd80SaPkE4AuCHR5JEmAAE0BeiY84vO8LDy0TYAuFlPZEz5IAABCEAAAhCAAAQgAAEUAyg4z6dbAJBX9j5B9WmuSQDqTpMEIIDa83z3UrAhAA17n9CILr54tCkyuTtRjsLri4if74ue1am6ednnXCUPn+3kOdpFVAMc3qRErSh+fYrRrXBVDiZonLgcuOYUoSkAO5cnol4AQZ6MsVqsELQGGFifEXYDUOW82d0123lYItoCYK3KsXd8IHqH+oXb2yWC0xPi/aNY6QlWSya2vSE8fd5S3nxkoZKHStEWQC7ji+ur0gSMY3B8pHK9Vh7Q5DwgyHnaAcjfJG5angjG7cO9JQAqxSxPrhztAKLJhC2Ax6fCr4YmN04rgLNsRl8AdHZ0eKslgMnJzUxunsnUaVXecmyldG0yEdF7G8TE5D6ASWNgEmhmZtuZXAVAKOehISKwxNriQQgIxkowBkq41gON2S5itm1qD1Aua/QENDgMTMBO+SIPEMY8sydH7QF0HAQgAAEIQAACEIAAfC1OAAJUAYR+fuD868i3AODN4T3H+fM4AQhAAAIQgAAEIAABCEAA/m2OAARwBOD0fUJrz/P/Ob4BDmFTcvL1s24AAAAASUVORK5CYII=">
+
   <!-- Tailwind CSS via CDN -->
   <script src="https://cdn.tailwindcss.com"></script>
 
@@ -318,6 +338,36 @@
       opacity: 0;
       pointer-events: none;
     }
+
+    /* ------------------------------------------------------------------
+       PRUDÊNCIO — vida no mascote (26/08/2026).
+
+       O balão é escondido por `hidden` (display:none), NUNCA por opacidade:
+       `prud-balao-sobe` escreve opacity em keyframe, e keyframe ganha de
+       `style="opacity:0"` inline. Controlar por opacidade aqui deixaria o
+       balão visível mesmo "escondido". Ver prudencioConvidar_.
+       ------------------------------------------------------------------ */
+    @keyframes prud-piscar { 0%,92%,100%{transform:scaleY(1)} 95%{transform:scaleY(.08)} }
+    @keyframes prud-pulo {
+      0%,62%,100%{transform:translateY(0) scale(1,1)}
+      66%{transform:translateY(0) scale(1.08,.9)}
+      74%{transform:translateY(-14px) scale(.95,1.06)}
+      82%{transform:translateY(0) scale(1.06,.94)}
+      88%{transform:translateY(-5px) scale(1,1)}
+    }
+    @keyframes prud-balao-sobe {
+      0%,54%{opacity:0;transform:translateY(10px)}
+      64%,90%{opacity:1;transform:translateY(0)}
+      100%{opacity:0;transform:translateY(4px)}
+    }
+    #prudencio-mascote { animation: prud-pulo 6s ease-in-out infinite; transform-origin: 50% 100%; }
+    #prudencio-convite { animation: prud-balao-sobe 6s ease-out infinite; }
+    /* mascote quieto enquanto a conversa está aberta */
+    body.prudencio-aberto #prudencio-mascote { animation: none; }
+    @media (prefers-reduced-motion: reduce) {
+      #prudencio-mascote, #prudencio-convite { animation: none; }
+      #prudencio-convite { opacity: 1; }
+    }
   </style>
 </head>
 <body class="bg-brand-bg min-h-screen">
@@ -416,6 +466,119 @@
         </svg>
       </a>
     </nav>
+
+    <!-- ============================ PRUDÊNCIO ============================
+         Botão flutuante no canto inferior direito.
+
+         HISTÓRICO DE POSIÇÃO (para não repetir a tentativa): em 25/08/2026 ele
+         foi movido para o header, no lugar da pílula "● Sistema Online". Não
+         ficou bom — o mascote competia com os dois logos e o balão espremia o
+         título — e foi revertido no mesmo dia. A pílula voltou ao lugar dela.
+
+         O mascote é a Cruz Verde antropomórfica que o time conhece, redesenhada
+         em SVG: o PNG original tem 137KB e viraria ~184KB em base64 num arquivo
+         que já passa de 500KB, e nesse tamanho luvas e tênis não se distinguem.
+
+         `prudencio-mascote` é o único lugar onde a arte é definida; o cabeçalho
+         do painel CLONA este SVG por JS, para não haver duas cópias do desenho
+         divergindo com o tempo. -->
+    <!-- PÍLULA, não círculo. O círculo branco com um desenho dentro parecia um
+         adesivo colado na tela; com o azul da marca e o nome escrito, vira um
+         elemento da interface — e quem nunca viu o Prudêncio entende o que é
+         sem precisar clicar para descobrir.
+
+         O mascote fica sobre um disco branco: a arte tem contorno preto e
+         verde-escuro, que sumiriam contra o azul do fundo. -->
+    <button id="prudencio-botao" type="button" onclick="prudencioAlternar()"
+            aria-label="Abrir o Prudêncio, assistente do portal"
+            class="fixed bottom-5 right-5 z-40 flex items-center gap-2.5 pl-2 pr-4 py-2 rounded-full shadow-lg transition-all duration-200 hover:-translate-y-0.5 hover:shadow-xl focus:outline-none focus:ring-4 focus:ring-brand-secondary/30"
+            style="background:#0d436b">
+      <span class="w-10 h-10 rounded-full bg-white flex items-center justify-center shrink-0">
+      <svg id="prudencio-mascote" viewBox="0 0 120 120" class="w-8 h-8" role="img" aria-hidden="true">
+        <path d="M38 12 H82 V38 H108 V82 H82 V108 H38 V82 H12 V38 H38 Z"
+              fill="#1e7a4d" stroke="#0f4a2f" stroke-width="6" stroke-linejoin="round"/>
+        <g style="animation:prud-piscar 4.6s ease-in-out infinite;transform-box:fill-box;transform-origin:50% 50%">
+          <circle cx="49" cy="52" r="7.6" fill="#ffffff"/>
+          <circle cx="71" cy="52" r="7.6" fill="#ffffff"/>
+          <circle cx="50.6" cy="53.4" r="3.7" fill="#0f2a1c"/>
+          <circle cx="72.6" cy="53.4" r="3.7" fill="#0f2a1c"/>
+        </g>
+        <path d="M47 70 Q60 82 73 70" fill="none" stroke="#ffffff" stroke-width="5.5" stroke-linecap="round"/>
+      </svg>
+      </span>
+      <span class="text-sm font-extrabold tracking-tight" style="color:#00a0dd">Prudêncio</span>
+      <span id="prudencio-novo" class="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-amber-400 border-2 border-white"></span>
+    </button>
+
+    <!-- Convite "Posso ajudar?". Elemento IRMÃO do botão, não filho: aninhar um
+         <button> dentro de outro é HTML inválido e o clique do interno não
+         chega de forma confiável.
+
+         ACIMA do botão, não ao lado: com o botão em pílula (mascote + nome), um
+         balão lateral empurraria os dois para o meio da tela. O bico aponta
+         para baixo, na vertical do mascote.
+
+         ENTRADA E SAÍDA SÃO DO CSS (`prud-balao-sobe`), não do JS — 26/08/2026.
+         Por isso o balão só pode ser escondido por `hidden` (display:none):
+         keyframe escreve opacity e GANHA de `style="opacity:0"` inline, então o
+         controle antigo por opacidade deixaria o balão visível mesmo
+         "escondido". Sem `transition-opacity` também: a animação já faz a
+         entrada, e a transição só brigaria com ela. -->
+    <button id="prudencio-convite" type="button" onclick="prudencioAlternar()"
+            class="hidden fixed bottom-[4.75rem] right-[6.5rem] z-40 whitespace-nowrap bg-white rounded-2xl rounded-bl-sm shadow-lg border border-slate-200 px-3 py-2 text-xs font-semibold text-brand-primary hover:shadow-xl">
+      Posso ajudar?
+      <!-- Bico à ESQUERDA do balão, na vertical do mascote. O botão tem o
+           mascote à esquerda e o nome à direita; um bico alinhado à direita
+           apontaria para a palavra "Prudêncio", não para quem fala. -->
+      <span class="absolute -bottom-[7px] left-7 w-0 h-0"
+            style="border-left:7px solid transparent;border-right:7px solid transparent;border-top:7px solid #e2e8f0"></span>
+      <span class="absolute -bottom-[6px] left-[1.8125rem] w-0 h-0"
+            style="border-left:6px solid transparent;border-right:6px solid transparent;border-top:6px solid #ffffff"></span>
+    </button>
+
+    <!-- Painel do chat. `hidden` no markup: só aparece ao clicar no mascote,
+         então não custa nada a quem não usa. Abre logo acima do botão que o
+         chamou — painel longe do gatilho faz a pessoa procurar onde a resposta
+         apareceu.
+
+         `fixed`, e não preso a nada: assim ele permanece na tela
+         mesmo que a pessoa role a página durante a conversa. -->
+    <section id="prudencio-painel" aria-live="polite"
+             class="hidden fixed bottom-24 right-5 z-40 w-[22rem] max-w-[calc(100vw-2.5rem)] h-[30rem] max-h-[calc(100vh-8rem)] bg-white rounded-2xl shadow-2xl border border-slate-200 flex flex-col overflow-hidden">
+      <div class="px-4 py-3 flex items-center gap-3 shrink-0" style="background:#0d436b">
+        <span id="prudencio-avatar" class="w-9 h-9 rounded-full bg-white flex items-center justify-center shrink-0"></span>
+        <div class="min-w-0">
+          <h2 class="text-sm font-extrabold leading-tight" style="color:#00a0dd">Prudêncio</h2>
+          <p class="text-[11px] font-medium leading-tight" style="color:#00a0dd;opacity:.85">Assistente do Pilar de Segurança</p>
+        </div>
+        <button type="button" onclick="prudencioAlternar()" aria-label="Fechar"
+                class="ml-auto shrink-0 w-7 h-7 rounded-full flex items-center justify-center text-white/70 hover:text-white hover:bg-white/10 transition-colors">
+          <svg viewBox="0 0 20 20" class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round">
+            <path d="M5 5l10 10M15 5L5 15"/>
+          </svg>
+        </button>
+      </div>
+
+      <div id="prudencio-conversa" class="flex-1 overflow-y-auto px-4 py-3 space-y-3 bg-slate-50"></div>
+
+      <!-- Sugestões: um chat em branco não diz o que sabe responder. Somem
+           depois da primeira pergunta. -->
+      <div id="prudencio-sugestoes" class="px-4 pb-2 flex flex-wrap gap-1.5 shrink-0"></div>
+
+      <form id="prudencio-form" onsubmit="prudencioEnviar(event)" class="p-3 border-t border-slate-100 flex items-end gap-2 shrink-0">
+        <!-- Enter envia, Shift+Enter quebra linha — é o que se espera de um
+             chat. O textarea cresce até 24 (6rem) e então rola. -->
+        <textarea id="prudencio-entrada" rows="1" placeholder="Pergunte sobre os indicadores…"
+                  onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();prudencioEnviar();}"
+                  oninput="this.style.height='auto';this.style.height=Math.min(this.scrollHeight,96)+'px';"
+                  class="flex-1 resize-none max-h-24 rounded-xl border border-slate-200 px-3 py-2 text-xs text-slate-700 focus:outline-none focus:ring-2 focus:ring-brand-secondary/40"></textarea>
+        <button id="prudencio-enviar" type="submit" aria-label="Enviar"
+                class="shrink-0 w-9 h-9 rounded-xl flex items-center justify-center text-white transition-opacity disabled:opacity-40"
+                style="background:#1e7a4d">
+          <svg viewBox="0 0 20 20" class="w-4 h-4" fill="currentColor"><path d="M2 10l16-8-6 8 6 8z"/></svg>
+        </button>
+      </form>
+    </section>
 
     <!-- Meu Feed — fixo no canto direito da tela. -->
     <aside id="feed-lateral" class="hidden xl:flex fixed top-0 right-0 h-screen w-[26rem] shrink-0 bg-white border-l border-slate-100 flex-col z-20 overflow-hidden">
@@ -705,17 +868,31 @@
                   </div>
                 </div>
 
+                <!-- Título "Taxa TRIR" (era "Taxa REC") e a linha do OL ao lado
+                     da meta: retorno da Beatriz em 25/08/2026. Os VALORES de
+                     meta e OL vão escritos na legenda — foi o que ela pediu ao
+                     anotar "Incluir OL - 0,0914 / Meta - 0,095"; linha sem
+                     número obriga a estimar pela altura. Preenchidos por JS,
+                     nunca fixos no markup: o OL vem de célula de planilha. -->
                 <div class="xl:col-span-6 painel-bloco flex flex-col">
-                  <h3 class="text-sm font-bold text-brand-primary uppercase tracking-wide">Taxa REC — realizado x meta</h3>
+                  <h3 class="text-sm font-bold text-brand-primary uppercase tracking-wide">Taxa TRIR — realizado x meta</h3>
                   <div class="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 mt-1 mb-2">
                     <p class="text-slate-400 text-xs">Acidentes registráveis por 200.000 h</p>
-                    <div class="flex items-center gap-3 text-[10px] font-semibold text-slate-500">
+                    <!-- basis-full: a legenda fica SEMPRE na própria linha, nos
+                         dois cards. Sem isso ela divide a linha com o subtítulo
+                         e a quebra vira acidente de largura de texto: medido em
+                         26/08, com "Outlook" o card TRIR estourava por 4px
+                         (subtítulo 198 + legendas 255 em 449) e o FAI não, e os
+                         dois gráficos lado a lado começavam em alturas
+                         diferentes. Assim a geometria não depende do rótulo. -->
+                    <div class="basis-full flex items-center gap-3 text-[10px] font-semibold text-slate-500">
                       <span class="inline-flex items-center gap-1"><span class="w-4 h-0.5 rounded-sm shrink-0" style="background:#00a0dd"></span>Realizado</span>
-                      <span class="inline-flex items-center gap-1"><span class="w-4 h-0 shrink-0" style="border-top:2px dashed #94a3b8"></span>Meta</span>
+                      <span class="inline-flex items-center gap-1"><span class="w-4 h-0 shrink-0" style="border-top:2px dashed #94a3b8"></span>Meta<b id="home-taxa-rec-meta-valor" class="font-extrabold text-slate-600" style="font-variant-numeric: tabular-nums"></b></span>
+                      <span id="home-taxa-rec-ol-legenda" class="hidden inline-flex items-center gap-1"><span class="w-4 h-0 shrink-0" style="border-top:2px dotted #7c3aed"></span>Outlook<b id="home-taxa-rec-ol-valor" class="font-extrabold" style="color:#7c3aed;font-variant-numeric: tabular-nums"></b></span>
                     </div>
                   </div>
                   <div class="w-full flex-1 flex items-center">
-                    <svg id="home-taxa-rec-svg" viewBox="0 0 720 300" class="w-full h-auto" role="img" aria-label="Taxa REC mensal realizada contra a meta"></svg>
+                    <svg id="home-taxa-rec-svg" viewBox="0 0 720 300" class="w-full h-auto" role="img" aria-label="Taxa TRIR mensal realizada contra a meta e o Outlook, a projeção de fechamento do ano"></svg>
                   </div>
                 </div>
 
@@ -723,13 +900,17 @@
                   <h3 class="text-sm font-bold text-brand-primary uppercase tracking-wide">Taxa FAI — realizado x meta</h3>
                   <div class="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 mt-1 mb-2">
                     <p class="text-slate-400 text-xs">Primeiros socorros por 200.000 h</p>
-                    <div class="flex items-center gap-3 text-[10px] font-semibold text-slate-500">
+                    <!-- basis-full pelo mesmo motivo do card ao lado: a legenda
+                         sempre na própria linha, para os dois gráficos ficarem
+                         na mesma altura independentemente do texto do rótulo. -->
+                    <div class="basis-full flex items-center gap-3 text-[10px] font-semibold text-slate-500">
                       <span class="inline-flex items-center gap-1"><span class="w-4 h-0.5 rounded-sm shrink-0" style="background:#00a0dd"></span>Realizado</span>
-                      <span class="inline-flex items-center gap-1"><span class="w-4 h-0 shrink-0" style="border-top:2px dashed #94a3b8"></span>Meta</span>
+                      <span class="inline-flex items-center gap-1"><span class="w-4 h-0 shrink-0" style="border-top:2px dashed #94a3b8"></span>Meta<b id="home-taxa-fai-meta-valor" class="font-extrabold text-slate-600" style="font-variant-numeric: tabular-nums"></b></span>
+                      <span id="home-taxa-fai-ol-legenda" class="hidden inline-flex items-center gap-1"><span class="w-4 h-0 shrink-0" style="border-top:2px dotted #7c3aed"></span>Outlook<b id="home-taxa-fai-ol-valor" class="font-extrabold" style="color:#7c3aed;font-variant-numeric: tabular-nums"></b></span>
                     </div>
                   </div>
                   <div class="w-full flex-1 flex items-center">
-                    <svg id="home-taxa-fai-svg" viewBox="0 0 720 300" class="w-full h-auto" role="img" aria-label="Taxa FAI mensal realizada contra a meta"></svg>
+                    <svg id="home-taxa-fai-svg" viewBox="0 0 720 300" class="w-full h-auto" role="img" aria-label="Taxa FAI mensal realizada contra a meta e o Outlook, a projeção de fechamento do ano"></svg>
                   </div>
                 </div>
 
@@ -958,7 +1139,7 @@
           <title id="piramide-titulo-debilitacao">Debilitação: 0</title>
           <polygon points="71.97,44.6 85,47.39 85,68.49 64.62,64.14" fill="url(#gradPir-debilitacao-esq)"/>
           <polygon points="85,47.39 98.03,44.6 105.38,64.14 85,68.49" fill="url(#gradPir-debilitacao-dir)"/>
-          <polyline points="71.97,44.6 85,47.39 98.03,44.6" fill="none" stroke="#6d1f1d" stroke-width="3.32" stroke-linejoin="round"/>
+         <!-- <polyline points="71.97,44.6 85,47.39 98.03,44.6" fill="none" stroke="#6d1f1d" stroke-width="3.32" stroke-linejoin="round"/> -->
         </g>
         <g class="piramide-fatia cursor-pointer hover:opacity-80 transition-opacity" onclick="onPiramideClick('Acidente com afastamento')">
           <title id="piramide-titulo-com-afastamento">Acidente com afastamento: 0</title>
@@ -1296,16 +1477,23 @@
 
 
               <!-- ========================================================
-                   ORDEM DA ABA "ÁREAS FAI / REC" — 5 faixas, todas fechando
+                   ORDEM DA ABA "ÁREAS FAI / REC" — 6 faixas, todas fechando
                    em 12 colunas. A sequência conta uma história, do macro ao
                    acionável, e cada faixa junta cards que respondem à MESMA
                    pergunta (e que, por isso, têm forma parecida):
 
-                     1 (order-1)      O QUE ACONTECEU  — FAI x Recordable por ano
-                     2 (order-2,3)    ONDE E QUANDO    — os 2 heatmaps área x mês
-                     3 (order-4,5,6)  QUÃO GRAVE       — gravidade, corpo, gerente
-                     4 (order-7,8)    POR QUÊ          — causa raiz, comport./cond.
-                     5 (order-9,10)   O QUE SE FAZ     — status + tabela de abertos
+                     1 (order-1)     O QUE ACONTECEU — FAI x Recordable por ano
+                     2 (order-2)     ONDE           — ocorrências por área x tipo
+                     3 (order-3,4)   QUÃO GRAVE     — partes do corpo, gerente
+                     4 (order-5,6)   POR QUÊ        — causa raiz, palavras
+                     5 (order-7)     POR QUÊ (2)    — objeto causador
+                     6 (order-8,9)   O QUE SE FAZ   — status + tabela de abertos
+
+                   Reorganizada em 25/08/2026, quando saíram três cards a pedido
+                   da Beatriz (os 2 heatmaps área × mês viraram o Pareto da faixa
+                   2; Gravidade e Comportamento/Condição foram retirados). A aba
+                   voltou de order-12 — que era o TETO do Tailwind — para order-9,
+                   então há folga para 3 cards novos antes de precisar renumerar.
 
                    Ao inserir card novo, encaixar na faixa da pergunta que ele
                    responde e renumerar a aba inteira — a ordem só precisa fazer
@@ -1315,39 +1503,39 @@
                    o grid é items-stretch e a faixa fica com fundos irregulares.
                    ======================================================== -->
 
-              <!-- FAI ÁREAS — Primeiros Socorros por área × mês. Mapa de calor (ramp
-                   sequencial âmbar, mesmo hue do "Primeiros Socorros" da Cruz): 12 meses
-                   como 12 séries categóricas seria ilegível, e o dado é esparso. -->
-              <div data-aba="areas" class="order-2 xl:col-span-6 painel-bloco flex flex-col min-h-[20rem]">
-                <h3 class="text-sm font-bold text-brand-primary uppercase tracking-wide">FAI Áreas — Primeiros Socorros</h3>
-                <div class="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 mt-1 mb-2">
-                  <p class="text-slate-400 text-xs">Ocorrências por área em cada mês do ano</p>
-                  <div class="flex items-center gap-1.5 text-[10px] font-semibold text-slate-500">
-                    <span>0</span>
-                    <span class="inline-block w-16 h-2.5 rounded-sm" style="background:linear-gradient(to right,#fff8e6,#7c4a03)"></span>
-                    <span id="fai-heatmap-max">+</span>
-                  </div>
-                </div>
-                <div class="w-full">
-                  <div id="fai-heatmap"></div>
-                </div>
-              </div>
+              <!-- OCORRÊNCIAS POR ÁREA — Pareto empilhado por tipo.
+                   Substituiu, em 25/08/2026 e a pedido da Beatriz, os DOIS mapas
+                   de calor área × mês que existiam aqui ("FAI Áreas" e "Áreas
+                   REC"): um card só, com as mesmas áreas classificadas por tipo
+                   de ocorrência nas cores padrão de gravidade.
 
-              <!-- ÁREAS REC — Acidente sem afastamento por área × mês, mesmo formato do FAI
-                   (ramp sequencial laranja, hue do "Acidente sem afastamento" da Cruz). -->
-              <div data-aba="areas" class="order-3 xl:col-span-6 painel-bloco flex flex-col min-h-[20rem]">
-                <h3 class="text-sm font-bold text-brand-primary uppercase tracking-wide">Áreas REC — Acidente sem afastamento</h3>
-                <div class="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 mt-1 mb-2">
-                  <p class="text-slate-400 text-xs">Ocorrências por área em cada mês do ano</p>
-                  <div class="flex items-center gap-1.5 text-[10px] font-semibold text-slate-500">
-                    <span>0</span>
-                    <span class="inline-block w-16 h-2.5 rounded-sm" style="background:linear-gradient(to right,#fff4e6,#9a3412)"></span>
-                    <span id="rec-heatmap-max">+</span>
+                   BARRAS HORIZONTAIS, não colunas verticais. O eixo aqui são
+                   NOMES DE ÁREA ("Fabricação Perfiladoras", "Manutenção
+                   Montagem") — na vertical eles teriam de girar 90° ou truncar,
+                   e é a mesma razão pela qual o Pareto por Gerente já é
+                   horizontal. O card FAI × Recordable segue vertical porque lá o
+                   eixo é o ano, que cabe em quatro dígitos.
+
+                   O que se perdeu na troca: a leitura por MÊS. Quem quiser a
+                   sazonalidade de uma área continua tendo a Cruz Verde e o feed
+                   de ocorrências. -->
+              <div data-aba="areas" class="order-2 xl:col-span-12 painel-bloco flex flex-col">
+                <div class="flex flex-wrap items-start justify-between gap-2">
+                  <div>
+                    <h3 class="text-sm font-bold text-brand-primary uppercase tracking-wide">Ocorrências por área</h3>
+                    <p class="text-slate-400 text-xs mt-1">Classificadas por tipo, da área com mais casos para a com menos</p>
+                  </div>
+                  <div class="flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] font-semibold text-slate-600 shrink-0">
+                    <span class="flex items-center gap-1.5"><span class="inline-block w-3 h-3 rounded-sm" style="background:#e53935;border:1px solid #c62828"></span>Com afastamento</span>
+                    <span class="flex items-center gap-1.5"><span class="inline-block w-3 h-3 rounded-sm" style="background:#fb8c00;border:1px solid #c76a00"></span>Sem afastamento</span>
+                    <span class="flex items-center gap-1.5"><span class="inline-block w-3 h-3 rounded-sm" style="background:#fdd835;border:1px solid #c9a800"></span>Primeiros socorros</span>
                   </div>
                 </div>
-                <div class="w-full">
-                  <div id="rec-heatmap"></div>
+                <div id="areas-tipo-wrap" class="mt-3 flex-1">
+                  <p id="areas-tipo-vazio" class="text-xs text-slate-400">Nenhuma ocorrência registrada no ano.</p>
+                  <div id="areas-tipo"></div>
                 </div>
+                <p id="areas-tipo-rodape" class="text-[11px] text-slate-400 mt-2"></p>
               </div>
               <!-- ============== OCORRÊNCIAS (aba Áreas FAI / REC) ==============
                    Aba "Ocorrências (FAI / REC)" cruzada com "Base pessoas"
@@ -1362,7 +1550,7 @@
               <!-- FAIXA 2 — resumo das Ocorrências: três cards de 4 colunas com a
                    MESMA altura mínima, senão a faixa fica com fundos irregulares
                    (a rosca é mais alta que uma lista de 4 barras). -->
-              <div data-aba="areas" class="order-11 xl:col-span-4 painel-bloco flex flex-col min-h-[22rem]">
+              <div data-aba="areas" class="order-8 xl:col-span-4 painel-bloco flex flex-col min-h-[22rem]">
                 <h3 class="text-sm font-bold text-brand-primary uppercase tracking-wide">Investigações — status</h3>
                 <p class="text-slate-400 text-xs mt-1 mb-3">Follow-up Status de cada ocorrência</p>
                 <div id="ocor-carregando" class="text-xs text-slate-400">Carregando ocorrências…</div>
@@ -1378,63 +1566,55 @@
                 </div>
               </div>
 
-              <div data-aba="areas" class="order-4 xl:col-span-4 painel-bloco flex flex-col min-h-[20rem]">
-                <h3 class="text-sm font-bold text-brand-primary uppercase tracking-wide">Gravidade</h3>
-                <p class="text-slate-400 text-xs mt-1 mb-3">Ocorrências por Extent (coluna Q)</p>
-                <div id="ocor-gravidade" class="space-y-1.5 flex-1"></div>
-              </div>
-
-              <div data-aba="areas" class="order-6 xl:col-span-4 painel-bloco flex flex-col min-h-[20rem]">
+              <!-- O card "Gravidade" (Ocorrências por Extent, coluna Q) foi
+                   RETIRADO em 25/08/2026 a pedido da Beatriz. O backend continua
+                   devolvendo `porGravidade` em getOcorrenciasPainel — é um
+                   agregado barato, e é o que permite religar o card sem tocar no
+                   Code.js se ela mudar de ideia. -->
+              <div data-aba="areas" class="order-4 xl:col-span-6 painel-bloco flex flex-col min-h-[20rem]">
                 <h3 class="text-sm font-bold text-brand-primary uppercase tracking-wide">Pareto por Gerente</h3>
                 <p class="text-slate-400 text-xs mt-1 mb-3">Ocorrências por gerente do supervisor · % acumulada</p>
                 <!-- Teto com rolagem: são 15 gerentes na base viva, e sem teto
-                     essa lista estica a faixa inteira, deixando Status e
-                     Gravidade com um vazio enorme ao lado. -->
+                     essa lista estica a faixa inteira, deixando o card vizinho
+                     com um vazio enorme ao lado. -->
                 <div id="ocor-pareto-gerente" class="space-y-1.5 flex-1 max-h-[11rem] overflow-y-auto pr-1"></div>
               </div>
 
               <!-- FAIXA 3 — detalhe. Mesma altura nos dois; a lista e a tabela
                    rolam POR DENTRO, o que mantém a faixa estável
                    independentemente de quantas linhas o dado trouxer. -->
-              <div data-aba="areas" class="order-5 xl:col-span-4 painel-bloco flex flex-col min-h-[20rem]">
+              <div data-aba="areas" class="order-3 xl:col-span-6 painel-bloco flex flex-col min-h-[20rem]">
                 <h3 class="text-sm font-bold text-brand-primary uppercase tracking-wide">Partes do corpo mais atingidas</h3>
                 <p class="text-slate-400 text-xs mt-1 mb-3">Body Part (coluna BM), as mais frequentes</p>
                 <div id="ocor-partes" class="space-y-1.5 flex-1 max-h-[18rem] overflow-y-auto pr-1"></div>
               </div>
 
-              <div data-aba="areas" class="order-12 xl:col-span-8 painel-bloco flex flex-col min-h-[22rem]">
+              <!-- INVESTIGAÇÕES POR ÁREA — Pareto empilhado pelo STATUS de
+                   follow-up, nas MESMAS cores da rosca ao lado (25/08/2026,
+                   pedido da Beatriz). Substituiu a tabela "Ocorrências em
+                   aberto", que listava caso a caso.
+
+                   Escopo diferente do da tabela antiga: aqui entram TODAS as
+                   ocorrências da área, não só as abertas — é o que dá sentido ao
+                   verde e permite ler "quanto desta área já foi fechado". O chip
+                   e o rodapé continuam dizendo quantas estão em aberto. -->
+              <div data-aba="areas" class="order-9 xl:col-span-8 painel-bloco flex flex-col min-h-[22rem]">
                 <div class="flex flex-wrap items-start justify-between gap-2">
                   <div>
-                    <h3 class="text-sm font-bold text-brand-primary uppercase tracking-wide">Ocorrências em aberto</h3>
-                    <p class="text-slate-400 text-xs mt-1">Investigações com status Open ou Not Initiated</p>
+                    <h3 class="text-sm font-bold text-brand-primary uppercase tracking-wide">Investigações por área</h3>
+                    <p class="text-slate-400 text-xs mt-1">Follow-up Status de cada ocorrência, da área com mais casos para a com menos</p>
                   </div>
                   <span id="ocor-abertos-chip" class="text-[10px] font-bold uppercase tracking-wide bg-orange-100 text-orange-700 px-2 py-0.5 rounded-full shrink-0"></span>
                 </div>
-                <!-- ERA O PRINCIPAL DEFEITO DO LAYOUT: sem teto, 58 linhas davam
-                     ~1.100px de card ao lado de um de ~300px, e a faixa inteira
-                     ficava torta. Agora rola por dentro, com o cabeçalho fixo. -->
-                <!-- overflow-y só (não auto): com table-fixed + colgroup as seis
-                     colunas dividem a largura disponível e nada estoura pro
-                     lado. Antes a coluna Status ficava fora da vista e só
-                     aparecia rolando na horizontal. -->
-                <div class="overflow-y-auto overflow-x-hidden mt-3 flex-1 max-h-[18rem]">
-                  <table class="w-full table-fixed text-[11px]">
-                    <colgroup>
-                      <col style="width:15%"><col style="width:20%"><col style="width:20%">
-                      <col style="width:19%"><col style="width:14%"><col style="width:12%">
-                    </colgroup>
-                    <thead class="sticky top-0 bg-white">
-                      <tr class="text-slate-400 border-b border-slate-100">
-                        <th class="text-left font-bold py-1 pr-2">Data</th>
-                        <th class="text-left font-bold py-1 pr-2">Supervisor</th>
-                        <th class="text-left font-bold py-1 pr-2">Gerente</th>
-                        <th class="text-left font-bold py-1 pr-2">Área</th>
-                        <th class="text-left font-bold py-1 pr-2">Gravidade</th>
-                        <th class="text-left font-bold py-1">Status</th>
-                      </tr>
-                    </thead>
-                    <tbody id="ocor-tabela-abertos"></tbody>
-                  </table>
+                <!-- Teto com rolagem, como o Pareto por Gerente: são dezenas de
+                     áreas na base viva, e sem teto este card estica a faixa
+                     inteira e deixa a rosca ao lado com um vazio enorme. -->
+                <!-- Sem <p> de "carregando" próprio: quem escreve o estado de
+                     carregando/erro aqui é ocorPlaceholder_, no container, igual
+                     aos outros cards de Ocorrências. Dois lugares dizendo o
+                     estado dava mensagem duplicada na tela. -->
+                <div class="overflow-y-auto overflow-x-hidden mt-3 flex-1 max-h-[18rem] pr-1">
+                  <div id="ocor-area-status"></div>
                 </div>
                 <p id="ocor-rodape" class="text-[11px] text-slate-400 mt-3"></p>
               </div>
@@ -1454,21 +1634,22 @@
                 <div class="flex flex-wrap items-start justify-between gap-2">
                   <div>
                     <h3 class="text-sm font-bold text-brand-primary uppercase tracking-wide">Ocorrências por ano — FAI × Recordable</h3>
-                    <p class="text-slate-400 text-xs mt-1">Comparação ano a ano, com a % acumulada do total</p>
+                    <p class="text-slate-400 text-xs mt-1">Comparação ano a ano</p>
                   </div>
                   <!-- Legenda ao lado do título, não embaixo do gráfico: a cor
-                       sozinha não pode ser o único identificador da série. -->
+                       sozinha não pode ser o único identificador da série.
+                       A % acumulada saiu em 2026-08-25 a pedido do usuário — a
+                       linha, o eixo direito e esta entrada da legenda. -->
                   <div class="flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] font-semibold text-slate-600 shrink-0">
                     <span class="flex items-center gap-1.5"><span class="inline-block w-3 h-3 rounded-sm" style="background:#e53935;border:1px solid #c62828"></span>Com afastamento</span>
                     <span class="flex items-center gap-1.5"><span class="inline-block w-3 h-3 rounded-sm" style="background:#fb8c00;border:1px solid #c76a00"></span>Sem afastamento</span>
                     <span class="flex items-center gap-1.5"><span class="inline-block w-3 h-3 rounded-sm" style="background:#fdd835;border:1px solid #c9a800"></span>Primeiros socorros</span>
-                    <span class="flex items-center gap-1.5"><span class="inline-block w-3 h-0.5 rounded-sm" style="background:#0d436b"></span>% acumulada</span>
                   </div>
                 </div>
                 <div id="ocor-fairec-wrap" class="mt-3 flex-1 overflow-x-auto">
                   <p id="ocor-fairec-vazio" class="text-xs text-slate-400">Carregando ocorrências…</p>
                   <svg id="ocor-fairec-svg" class="hidden w-full" viewBox="0 0 960 300" role="img"
-                       aria-label="Ocorrências por ano: barras de FAI e Recordable com linha de porcentagem acumulada"></svg>
+                       aria-label="Ocorrências por ano: barras de FAI e Recordable"></svg>
                 </div>
                 <p id="ocor-fairec-rodape" class="text-[11px] text-slate-400 mt-2"></p>
               </div>
@@ -1482,7 +1663,7 @@
                    col-span-12 por causa do comprimento dos rótulos. Teto com
                    rolagem pelo mesmo motivo do Pareto por Gerente: sem ele, uma
                    lista longa estica a faixa inteira. -->
-              <div data-aba="areas" class="order-7 xl:col-span-8 painel-bloco flex flex-col min-h-[26rem]">
+              <div data-aba="areas" class="order-5 xl:col-span-8 painel-bloco flex flex-col min-h-[26rem]">
                 <div class="flex flex-wrap items-start justify-between gap-2">
                   <div>
                     <h3 class="text-sm font-bold text-brand-primary uppercase tracking-wide">Causa raiz</h3>
@@ -1501,51 +1682,37 @@
                 <p id="causa-raiz-rodape" class="text-[11px] text-slate-400 mt-3"></p>
               </div>
 
-              <!-- FAIXA 6 — Comportamento / Condição (item 6 do slide da Beatriz):
-                   "Gráfico de pizza". Fonte: base TAG SAF, que JÁ traz a
-                   classificação pronta na coluna RELATO — a mesma que alimenta
-                   os 2 níveis de baixo da Pirâmide. Nenhuma IA envolvida.
+              <!-- O card "Comportamento / Condição" (pizza da base TAG SAF) foi
+                   RETIRADO em 25/08/2026 a pedido da Beatriz — ela mesma o havia
+                   pedido no slide de 17/08 (item 6), então isto é uma reversão,
+                   não um esquecimento.
 
-                   Fica junto dos cards de ocorrências por ser o mesmo assunto do
-                   slide, mas a BASE É OUTRA (TAG = observação preventiva,
-                   ocorrência = acidente). O rodapé diz isso, senão alguém soma os
-                   dois totais achando que falam do mesmo universo. -->
-              <div data-aba="areas" class="order-8 xl:col-span-4 painel-bloco flex flex-col min-h-[26rem]">
-                <div class="flex flex-wrap items-start justify-between gap-2">
-                  <div>
-                    <h3 class="text-sm font-bold text-brand-primary uppercase tracking-wide">Comportamento / Condição</h3>
-                    <p class="text-slate-400 text-xs mt-1">Distribuição dos apontamentos TAG SAF</p>
-                  </div>
-                  <span id="compcond-chip" class="hidden text-[10px] font-bold uppercase tracking-wide bg-violet-100 text-violet-700 px-2 py-0.5 rounded-full shrink-0"></span>
-                </div>
-                <!-- Empilhado e centralizado: o card ocupa 4 colunas (~350px),
-                     onde pizza + legenda lado a lado não cabem sem quebrar feio.
-                     Vertical, a pizza vira o centro do card e a legenda ganha a
-                     largura inteira pros rótulos longos ("Comportamento
-                     Inseguro") não quebrarem no meio. -->
-                <div id="compcond-wrap" class="mt-3 flex flex-col items-center justify-center gap-5 flex-1">
-                  <p id="compcond-vazio" class="text-xs text-slate-400">Carregando apontamentos…</p>
-                  <svg id="compcond-svg" class="hidden w-44 h-44 shrink-0" viewBox="0 0 120 120" role="img"
-                       aria-label="Distribuição entre condição insegura e comportamento inseguro"></svg>
-                  <div id="compcond-legenda" class="w-full space-y-2 text-xs"></div>
-                </div>
-                <p id="compcond-rodape" class="text-[11px] text-slate-400 mt-3"></p>
-              </div>
+                   `getComportamentoCondicao` continua no Code.js, dormindo, como
+                   já acontece com o Route Map e o SAF Action Tracker: ele só soma
+                   um pacote que a TAG SAF já tem em cache, não custa leitura
+                   nenhuma, e é o que permite religar o card sem reescrever o
+                   backend. O renderizador da pizza saiu junto com o card. -->
 
               <!-- FAIXA 5 — OBJETO CAUSADOR (coluna "Cause Object" / BO). Ainda é
                    "por quê", por isso vem logo depois de causa raiz.
 
-                   ATENÇÃO: com estes dois cards a aba chega a order-12, que é o
-                   LIMITE do Tailwind (order-13+ não existe e o card cairia em
-                   order:0, indo parar antes de todo mundo). Card novo aqui exige
-                   renumerar a aba inteira ou agrupar dois cards numa faixa. -->
-              <div data-aba="areas" class="order-9 xl:col-span-8 painel-bloco flex flex-col min-h-[24rem]">
+                   25/08/2026, retorno da Beatriz: saiu a linha de % acumulada (e
+                   com ela o eixo direito), as colunas passaram a ser EMPILHADAS
+                   POR TIPO de ocorrência nas cores de gravidade, e a categoria
+                   "Outros" saiu do gráfico — segue no rodapé, que é onde ela
+                   mede o que o dicionário ainda não cobre. -->
+              <div data-aba="areas" class="order-7 xl:col-span-12 painel-bloco flex flex-col min-h-[24rem]">
                 <div class="flex flex-wrap items-start justify-between gap-2">
                   <div>
                     <h3 class="text-sm font-bold text-brand-primary uppercase tracking-wide">Objeto causador</h3>
-                    <p class="text-slate-400 text-xs mt-1">Texto livre da coluna BO agrupado em macro-categorias · % acumulada</p>
+                    <p class="text-slate-400 text-xs mt-1">Texto livre da coluna BO agrupado em macro-categorias</p>
                   </div>
-                  <span id="objcausa-chip" class="hidden text-[10px] font-bold uppercase tracking-wide bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full shrink-0"></span>
+                  <div class="flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] font-semibold text-slate-600 shrink-0">
+                    <span class="flex items-center gap-1.5"><span class="inline-block w-3 h-3 rounded-sm" style="background:#e53935;border:1px solid #c62828"></span>Com afastamento</span>
+                    <span class="flex items-center gap-1.5"><span class="inline-block w-3 h-3 rounded-sm" style="background:#fb8c00;border:1px solid #c76a00"></span>Sem afastamento</span>
+                    <span class="flex items-center gap-1.5"><span class="inline-block w-3 h-3 rounded-sm" style="background:#fdd835;border:1px solid #c9a800"></span>Primeiros socorros</span>
+                    <span id="objcausa-chip" class="hidden text-[10px] font-bold uppercase tracking-wide bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full shrink-0"></span>
+                  </div>
                 </div>
                 <div class="mt-3 flex-1 overflow-x-auto">
                   <p id="objcausa-vazio" class="text-xs text-slate-400">Carregando objetos…</p>
@@ -1560,7 +1727,7 @@
                    canvas + CDN e um layout em espiral que, com 40 termos curtos,
                    não lê melhor que uma tag cloud — e o portal não carrega
                    biblioteca de gráfico em nenhuma outra tela. -->
-              <div data-aba="areas" class="order-10 xl:col-span-4 painel-bloco flex flex-col min-h-[24rem]">
+              <div data-aba="areas" class="order-6 xl:col-span-4 painel-bloco flex flex-col min-h-[26rem]">
                 <div>
                   <h3 class="text-sm font-bold text-brand-primary uppercase tracking-wide">Palavras mais frequentes</h3>
                   <p class="text-slate-400 text-xs mt-1">Termos soltos da coluna BO, sem palavras vazias</p>
@@ -1573,18 +1740,28 @@
 
 
               <!-- BONECO — Partes do corpo atingidas (item 3 do One Page). Fonte
-                   própria (planilha de Ocorrências EHS, aba "Default"), por isso tem
-                   filtro Ano/Mês/Área PRÓPRIO em vez de usar os selects de cima —
-                   mesmo raciocínio da Pirâmide (piramide-select-area/periodo), que
-                   também não compartilha filtro com a Cruz Verde. -->
+                   própria (planilha de Ocorrências EHS), por isso tem selects de
+                   Ano/Mês próprios.
+
+                   A ÁREA, porém, é COMPARTILHADA com a Cruz e a Pirâmide desde
+                   25/08/2026: mexer em qualquer um dos três leva os outros
+                   junto (ver sincronizarAreaEntreCards_). Isso só foi possível
+                   quando o Boneco passou a agrupar pela coluna BC ("Employee
+                   Dept, Area (WHERE)"), que é a mesma taxonomia da coluna H da
+                   Cruz — antes ele agrupava por `Area`, o nível LINHA. -->
               <div data-aba="panorama" class="order-3 xl:col-span-12 painel-bloco flex flex-col">
                 <div class="flex flex-wrap items-center justify-between gap-3">
                   <div>
                     <h3 class="text-sm font-bold text-brand-primary uppercase tracking-wide">Boneco — Partes do Corpo</h3>
                     <p id="boneco-categoria-titulo" class="text-slate-400 text-xs mt-1">Todas as ocorrências — Total: 0</p>
+                    <!-- Área existe na Cruz mas não na base de ocorrências: sem
+                         este aviso o card mostraria um corpo sem marcação, que se
+                         lê como "nenhuma lesão aqui" em vez de "esta área não é
+                         registrada naquela base". -->
+                    <p id="boneco-aviso-area" class="hidden text-[11px] font-semibold text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-2 py-1 mt-2"></p>
                   </div>
                   <div class="flex flex-wrap items-center gap-2">
-                    <select id="boneco-select-area" onchange="renderizarBonecoPartesDoCorpo()"
+                    <select id="boneco-select-area" onchange="onBonecoAreaAlterada()"
                       class="appearance-none max-w-[13rem] truncate rounded-full border border-slate-200 px-3 py-1.5 text-xs font-bold text-brand-primary bg-white shadow-sm cursor-pointer focus:outline-none focus:ring-2 focus:ring-brand-secondary/40">
                       <option value="Todas">Todas as áreas</option>
                     </select>
@@ -1744,16 +1921,18 @@
 
               <div class="grid grid-cols-1 xl:grid-cols-12 gap-5 items-start">
 
-                <!-- Avanço acumulado: Meta (referência tracejada) x Realizado -->
+                <!-- Avanço acumulado: só o Realizado. A linha da Meta foi
+                     desligada em 2026-08-25; a legenda e o subtítulo saíram
+                     junto, senão o card anunciaria uma série que não desenha. A
+                     meta continua no tooltip de cada ponto. -->
                 <div class="xl:col-span-7 painel-bloco">
                   <div class="flex flex-wrap items-baseline justify-between gap-2 mb-1">
                     <h3 class="text-sm font-bold text-brand-primary uppercase tracking-wide">Avanço acumulado</h3>
                     <div class="flex items-center gap-3 text-[10px] font-semibold text-slate-500">
-                      <span class="inline-flex items-center gap-1"><span class="inline-block w-4 h-0.5 rounded-full" style="background:#94a3b8"></span>Meta</span>
                       <span class="inline-flex items-center gap-1"><span class="inline-block w-4 h-0.5 rounded-full" style="background:#00a0dd"></span>Realizado</span>
                     </div>
                   </div>
-                  <p class="text-slate-400 text-xs mb-2">Meta acumulada x realizado acumulado, semana a semana</p>
+                  <p class="text-slate-400 text-xs mb-2">Realizado acumulado, semana a semana (meta no tooltip de cada ponto)</p>
                   <div class="w-full">
                     <svg id="risk-avanco-svg" viewBox="0 0 780 300" class="w-full h-auto" role="img" aria-label="Avanço acumulado das tratativas de risco: meta contra realizado, por semana"></svg>
                   </div>
@@ -1888,6 +2067,47 @@
                 comportamentoInseguro: Math.floor(rng() * 70)
               };
             }
+
+            /* Espelha getTagSafRegistros do Code.js — MESMO formato de retorno,
+               inclusive `ok`, `total`, `truncado` e `maximoPorMes`. As descrições
+               da TAG SAF não vêm mais no pacote da Cruz; sem este mock a Pirâmide
+               clicável parece quebrada no dev-server e correta em produção.
+               A contagem por mês é a mesma de mockGerarTagSaf, cortada no teto do
+               balde, pra o feed e o gráfico não se contradizerem na tela. */
+            var MOCK_TAG_SAF_MAX_POR_MES = 30;
+            var MOCK_TAG_SAF_MAX_RETORNO = 300;
+            function mockGerarTagSafRegistros(ano, area, periodo, tipo) {
+              var meses = (periodo === 'todos' || !periodo) ? [1,2,3,4,5,6,7,8,9,10,11,12] : [Number(periodo)];
+              var lista = [];
+
+              meses.forEach(function (mes) {
+                var totais = mockGerarTagSaf(ano, mes, area);
+                var quantos = Math.min(totais[tipo] || 0, MOCK_TAG_SAF_MAX_POR_MES);
+                var rng = mockRng(mockSemente('tagsafreg-' + ano + '-' + mes + '-' + (area || 'Todas') + '-' + tipo));
+                var diasNoMes = new Date(ano, mes, 0).getDate();
+                for (var i = 0; i < quantos; i++) {
+                  lista.push({
+                    dia: 1 + Math.floor(rng() * diasNoMes),
+                    mes: mes,
+                    departamento: area === 'Todas' ? mockDepartamentos[Math.floor(rng() * mockDepartamentos.length)] : area,
+                    descricao: mockDescricoes[Math.floor(rng() * mockDescricoes.length)]
+                  });
+                }
+              });
+
+              lista.sort(function (a, b) { return (b.mes - a.mes) || (b.dia - a.dia); });
+              return {
+                ok: true,
+                ano: Number(ano),
+                area: area,
+                periodo: periodo,
+                tipo: tipo,
+                registros: lista.slice(0, MOCK_TAG_SAF_MAX_RETORNO),
+                total: lista.length,
+                truncado: lista.length > MOCK_TAG_SAF_MAX_RETORNO,
+                maximoPorMes: MOCK_TAG_SAF_MAX_POR_MES
+              };
+            }
             var mockDescricoes = [
               'Colaborador identificou vazamento de óleo próximo ao equipamento.',
               'Escorregão em piso molhado próximo à linha de montagem.',
@@ -1897,16 +2117,32 @@
               'Corte superficial na mão durante operação de parafusamento manual.',
               'Guarda-corpo apresentou sinal de folga e foi sinalizado pra manutenção.'
             ];
+            /* O backend guarda COR e TIPO DE EVENTO em campos distintos
+               (CRUZ_SEGURANCA_CORES faz nome -> cor). O mock guardava a cor nos
+               dois, e o feed da Pirâmide — que filtra por tipoEvento — nunca
+               achava nada aqui, mesmo funcionando em produção. */
+            var mockCorParaTipo = {
+              vermelho: 'Acidente com afastamento',
+              laranja: 'Acidente sem afastamento',
+              amarelo: 'Primeiros Socorros',
+              azul: 'Quase acidente',
+              cinza: 'Princípio de Incêndio'
+            };
             function mockGerarOcorrencias(ano, mes, departamento, dias) {
               var rng = mockRng(mockSemente('desc-' + ano + '-' + mes + '-' + (departamento || 'Todas')));
+              var classes = ['A', 'B', 'C'];
               var lista = [];
               Object.keys(dias).forEach(function (dia) {
+                var cor = dias[dia];
                 lista.push({
                   dia: Number(dia),
-                  tipoEvento: dias[dia],
-                  cor: dias[dia],
+                  tipoEvento: mockCorParaTipo[cor] || cor,
+                  cor: cor,
                   departamento: departamento === 'Todas' ? mockDepartamentos[Math.floor(rng() * mockDepartamentos.length)] : departamento,
-                  descricao: mockDescricoes[Math.floor(rng() * mockDescricoes.length)]
+                  descricao: mockDescricoes[Math.floor(rng() * mockDescricoes.length)],
+                  // Só o Quase Acidente tem A/B/C — é o que separa as três
+                  // fatias azuis da Pirâmide.
+                  classificacaoNM: cor === 'azul' ? classes[Math.floor(rng() * 3)] : ''
                 });
               });
               lista.sort(function (a, b) { return b.dia - a.dia; });
@@ -2048,11 +2284,25 @@
                   taxaFai: acHht > 0 ? (acFai * 200000) / acHht : null,
                   taxaRec: acHht > 0 ? (acRec * 200000) / acHht : null
                 },
+                // Metas seguem do Scorecard (o retorno da Beatriz de 25/08
+                // confirma 0,095 e 1,571). Quem veio da planilha de YTD é o OL.
                 metas: {
                   taxaFai: 1.571,
                   taxaRec: 0.095,
                   serieFai: serieConstante(1.571),
-                  serieRec: serieConstante(0.095)
+                  serieRec: serieConstante(0.095),
+                  origem: 'Scorecard Manufatura LAR'
+                },
+                // MESMO FORMATO do backend, com os números MEDIDOS na planilha
+                // viva em 26/08/2026 (`debugOlTaxas()`), para o dev-server
+                // mostrar a mesma coisa que produção. O 0,883 que estava aqui
+                // era o print da Beatriz de 25/08 — a mesma conta com 29
+                // eventos em vez de 30; a projeção foi revista, não é erro.
+                ol: {
+                  taxaFai: 0.9139226476687122,
+                  taxaRec: 0.09139226476687123,
+                  origem: 'Planilha "YTD real + projeção" (F162 / AW162)',
+                  erro: null
                 },
                 oficial: {
                   firstAid: [2.079, 1.478, 2.340, 1.717, 1.061, 0.503, 0.390, null, null, null, null, null],
@@ -2377,7 +2627,19 @@
                 coxa: 4, joelho: 7, perna: 5, tornozelo: 6, pe: 12, outro: 5
               };
               var regioes = Object.keys(pesos);
-              var areas = ['Fabrica 1', 'Fabrica 2', 'Logistica', 'Manutencao'];
+              // MESMAS áreas macro da Cruz (mockDepartamentos), porque desde
+              // 25/08/2026 o Boneco agrupa pela coluna BC e compartilha o filtro
+              // com ela. Eram 'Fabrica 1'/'Fabrica 2'/'Logistica'/'Manutencao',
+              // que não existiam em lugar nenhum da Cruz — no dev-server o
+              // filtro compartilhado nunca casaria.
+              //
+              // "Fabricação Lavanderia" e "Fabricação Cocção" ficam DE FORA de
+              // propósito: é a lacuna real medida por debugPonteAreas (elas
+              // existem na Cruz e não na base de Ocorrências), e é o caso que
+              // faz o aviso do card aparecer.
+              var areas = mockDepartamentos.filter(function (a) {
+                return a !== 'Fabricação Lavanderia' && a !== 'Fabricação Cocção';
+              });
               var categorias = ['comAfastamento', 'semAfastamento', 'primeirosSocorros'];
               // Volume relativo por categoria: primeiros socorros é ordem de
               // grandeza maior que acidente com afastamento, como na planta real.
@@ -2467,6 +2729,65 @@
                 var ctx = this;
                 setTimeout(function () { ctx.onSuccess && ctx.onSuccess(mockGerarPacoteAno(ano)); }, 400);
               },
+              getTagSafRegistros: function (ano, area, periodo, tipo) {
+                var ctx = this;
+                setTimeout(function () { ctx.onSuccess && ctx.onSuccess(mockGerarTagSafRegistros(ano, area, periodo, tipo)); }, 400);
+              },
+              prudencioSaudacaoInicial: function () {
+                var ctx = this;
+                setTimeout(function () {
+                  // Mesma regra do servidor: a parte do dia sai da hora, e o
+                  // mantra da planta abre a conversa.
+                  var h = new Date().getHours();
+                  // Faixas fechadas dos dois lados, igual ao servidor: com
+                  // `h < 18` solto, a madrugada caía em "Boa tarde".
+                  var parte = (h >= 5 && h < 12) ? 'Bom dia'
+                    : (h >= 12 && h < 18) ? 'Boa tarde' : 'Boa noite';
+                  ctx.onSuccess && ctx.onSuccess({
+                    nome: 'Lucas',
+                    texto: parte + ' com respeito e segurança, Lucas!\n\n' +
+                      'Sou o Prudêncio e cuido dos números deste portal. Posso falar de ' +
+                      'ocorrências por área, taxas TRIR e FAI, ações do ATS, tendência por ' +
+                      'ano e partes do corpo.\n\nO que você quer saber?'
+                  });
+                }, 250);
+              },
+              prudencioPerguntar: function (pergunta) {
+                var ctx = this;
+                // 900ms: no modo de regras a resposta é rápida (só agregados em
+                // cache). Com a IA ligada seriam 5 a 15 segundos — o estado
+                // "pensando" existe para aquele caso.
+                setTimeout(function () {
+                  var t = (pergunta || '').toLowerCase();
+                  if (t.indexOf('area') > -1 || t.indexOf('área') > -1) {
+                    ctx.onSuccess && ctx.onSuccess({
+                      modo: 'regras',
+                      texto: 'Em 2026, as áreas com mais ocorrências são:\n\n' +
+                        '1. **Logística Interna** — 118 no total (91 primeiros socorros, 12 registráveis)\n' +
+                        '2. **Montagem Lavanderia** — 96 no total (80 primeiros socorros, 9 registráveis)\n' +
+                        '3. **Montagem Cocção** — 79 no total (66 primeiros socorros, 8 registráveis)\n\n' +
+                        'Ao todo são 14 áreas com registro no ano.',
+                      fontes: ['Ocorrências por área']
+                    });
+                    return;
+                  }
+                  // Fallback: é o caminho que mais importa julgar na tela — ele
+                  // precisa induzir a próxima pergunta, não só negar.
+                  ctx.onSuccess && ctx.onSuccess({
+                    modo: 'regras', semResposta: true,
+                    texto: 'Ainda não sei responder isso, Lucas — por enquanto eu leio os ' +
+                      'indicadores do portal, não texto livre.\n\n' +
+                      'O que eu sei responder agora:\n' +
+                      '• "qual **área** tem mais ocorrências"\n' +
+                      '• "como está a **taxa** TRIR"\n' +
+                      '• "quantas **ações** do ATS estão vencidas"\n' +
+                      '• "qual a **tendência** por ano"\n' +
+                      '• "quais **partes do corpo** mais se machucam"\n' +
+                      '• "quantos **quase acidentes** tivemos"\n\n' +
+                      'Tente uma dessas — ou use uma dessas palavras na sua pergunta.'
+                  });
+                }, 900);
+              },
               getRiscosAltos: function () {
                 var ctx = this;
                 setTimeout(function () { ctx.onSuccess && ctx.onSuccess(mockGerarRiscos()); }, 400);
@@ -2511,13 +2832,40 @@
                     });
                   }
                   var par = function (a) { return a.map(function (x) { return { nome: x[0], total: x[1] }; }); };
+
+                  // Área × status (25/08) — MESMO formato do backend: já
+                  // ordenado por total desc, com o mapa de status por rótulo
+                  // BRUTO (é o frontend que traduz rótulo -> cor). A proporção
+                  // segue a da rosca: a grande maioria fechada.
+                  var porAreaStatus = areas.map(function (area, i) {
+                    var total = 46 - i * 5;
+                    var naoIniciadas = i % 3 === 0 ? 2 : 0;
+                    var abertas = 1 + (i % 4);
+                    return {
+                      area: area, total: total,
+                      status: {
+                        'Closed': total - abertas - naoIniciadas,
+                        'Open': abertas,
+                        'Not Initiated': naoIniciadas
+                      }
+                    };
+                  }).sort(function (a, b) { return b.total - a.total; });
+
                   ctx.onSuccess && ctx.onSuccess({
                     erro: null, total: 415,
                     porStatus: par(status), porGravidade: par(gravidade),
                     porGerente: par(gerentes), porParteCorpo: par(partes),
+                    porAreaStatus: porAreaStatus,
                     abertos: abertos, periodo: { de: '01/2020', ate: '07/2026' },
                     linhasLidas: 415, semSupervisor: 0, semGerente: 185,
-                    totalAbertos: 33, abertosExibidos: 33
+                    totalAbertos: 33, abertosExibidos: 33,
+                    // Hierarquia OK. A aba 'Base pessoas' sumiu da planilha
+                    // entre 09/08 e 26/08/2026 e o usuário a RESSUSCITOU em
+                    // 26/08 — o mock voltou ao estado bom.
+                    // Os números são os medidos em 09/08: 96 pessoas mapeadas e
+                    // 185 das 415 ocorrências sem gerente (45%), que é a maior
+                    // barra do Pareto e sai em cinza por ser lacuna de cadastro.
+                    hierarquia: { total: 96, erro: null }
                   });
                 }, 400);
               },
@@ -2607,32 +2955,6 @@
                   });
                 }, 400);
               },
-              getComportamentoCondicao: function () {
-                var ctx = this;
-                setTimeout(function () {
-                  // Proporção plausível pra base TAG SAF (condição insegura é a
-                  // maioria folgada dos apontamentos). Os números absolutos são
-                  // aproximados — o que interessa conferir aqui é o layout da
-                  // pizza; debugComportamentoCondicao dá os reais.
-                  var porAno = [
-                    { ano: 2023, condicaoInsegura: 7480, comportamentoInseguro: 2610, total: 10090 },
-                    { ano: 2024, condicaoInsegura: 9120, comportamentoInseguro: 3240, total: 12360 },
-                    { ano: 2025, condicaoInsegura: 11340, comportamentoInseguro: 4180, total: 15520 },
-                    { ano: 2026, condicaoInsegura: 6890, comportamentoInseguro: 2470, total: 9360 }
-                  ];
-                  var cond = porAno.reduce(function (s, l) { return s + l.condicaoInsegura; }, 0);
-                  var comp = porAno.reduce(function (s, l) { return s + l.comportamentoInseguro; }, 0);
-                  var total = cond + comp;
-                  ctx.onSuccess && ctx.onSuccess({
-                    erro: null,
-                    itens: [
-                      { chave: 'condicaoInsegura', nome: 'Condição Insegura', total: cond, pct: (cond / total) * 100 },
-                      { chave: 'comportamentoInseguro', nome: 'Comportamento Inseguro', total: comp, pct: (comp / total) * 100 }
-                    ],
-                    total: total, porAno: porAno, periodo: { de: 2023, ate: 2026 }
-                  });
-                }, 400);
-              },
               getObjetoCausadorData: function () {
                 var ctx = this;
                 setTimeout(function () {
@@ -2652,10 +2974,19 @@
                   var acum = 0;
                   var categorias = cats.map(function (c) {
                     acum += c[1];
+                    // A quebra por tipo (25/08) espelha a proporção da base: a
+                    // esmagadora maioria é primeiros socorros, com afastamento é
+                    // raríssimo. Sem esses campos no mock, as colunas empilhadas
+                    // sairiam vazias no dev-server e pareceriam um bug.
+                    var comAf = Math.round(c[1] * 0.03);
+                    var semAf = Math.round(c[1] * 0.09);
                     return {
                       nome: c[0], total: c[1],
                       pct: (c[1] / comTexto) * 100,
-                      pctAcumulada: (acum / comTexto) * 100
+                      pctAcumulada: (acum / comTexto) * 100,
+                      comAfastamento: comAf,
+                      semAfastamento: semAf,
+                      primeirosSocorros: c[1] - comAf - semAf
                     };
                   });
                   var pal = [['gabinete',54],['caixa',41],['motor',33],['carrinho',29],['palete',26],
@@ -2755,7 +3086,10 @@
                     erro: null, total: aberto + vencido, aberto: aberto, vencido: vencido,
                     porResponsavel: lista, porGerente: mapaLista(ger), porArea: mapaLista(are),
                     topAtrasos: atrasos.slice(0, 5),
-                    linhasLidas: 412, semResponsavel: 0, semGerente: semGerente, pessoasMapeadas: 96
+                    linhasLidas: 412, semResponsavel: 0, semGerente: semGerente, pessoasMapeadas: 96,
+                    // Hierarquia OK, como no painel de Ocorrências: o ATS lê a
+                    // MESMA aba 'Base pessoas', ressuscitada em 26/08/2026.
+                    hierarquia: { total: 96, erro: null }
                   });
                 }, 400);
               },
@@ -2908,6 +3242,14 @@
     var HOME_MESES_CURTOS = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
     var HOME_COR_REAL = '#00a0dd';
     var HOME_COR_META = '#94a3b8';
+    // OL em VIOLETA, decidido em 25/08 depois de ver o card na tela: no TRIR a
+    // meta (0,095) e o OL (0,0914) ficam a menos de 4% um do outro, e com os dois
+    // em tons de cinza as linhas viravam uma faixa única — ninguém lia que eram
+    // duas. Violeta é o matiz mais distante do azul do Realizado e do cinza da
+    // Meta que NÃO pertence à escala de gravidade do portal
+    // (vermelho→laranja→amarelo→azul). O violeta do TAG Safety (#5b21b6) é outro
+    // tom e vive noutra tela, então não há colisão de significado.
+    var HOME_COR_OL = '#7c3aed';
 
     // Paleta de status — reservada, e sempre acompanhada de símbolo + texto,
     // nunca cor sozinha (daltonismo / impressão P&B).
@@ -3115,6 +3457,19 @@
         .replace(/id="/g, 'id="home-')
         .replace(/url\(#/g, 'url(#home-')
         .replace(/href="#/g, 'href="#home-');
+
+      // A HOME É ESTÁTICA — só os números reais. Decisão do usuário em
+      // 2026-08-25, e o clone tornava isso impossível sozinho: ele copia o
+      // outerHTML inteiro, então herdava o onclick de cada fatia do painel.
+      // Clicar na home abria o feed lateral com os selects de área e período
+      // ainda VAZIOS (quem os preenche é a carga do painel da Cruz): o subtítulo
+      // saía "(undefined)" e a lista vinha zerada. A interação vive só no
+      // METRICS SAF, onde os dois filtros existem de fato.
+      Array.prototype.forEach.call(alvo.querySelectorAll('.piramide-fatia'), function (fatia) {
+        fatia.removeAttribute('onclick');
+        fatia.setAttribute('class', 'piramide-fatia');
+      });
+
       alvo.setAttribute('data-pronta', '1');
     }
 
@@ -3172,10 +3527,29 @@
       // calculávamos da Compilado + HHT — ver comentário do campo `oficial` no
       // Code.js. A calculada continua vindo no payload (dados.meses) e é usada
       // só como conferência no rodapé.
+      var metasHome = dados.metas || {};
+      // OL: quando a leitura da célula falha o backend devolve `erro` e os
+      // valores em null — a linha e a legenda somem, em vez de exibir número
+      // inventado. O tooltip de cada referência diz de onde ela veio.
+      var olHome = dados.ol || {};
       homeDesenharTaxa('home-taxa-rec-svg', dados.meses, 'taxaRec', 'rec',
-        (dados.metas || {}).serieRec, (dados.metas || {}).taxaRec, (dados.oficial || {}).trr);
+        metasHome.serieRec, metasHome.taxaRec, (dados.oficial || {}).trr, {
+          origemMeta: metasHome.origem || '',
+          ol: olHome.erro ? null : olHome.taxaRec,
+          origemOl: olHome.origem || '',
+          idMetaValor: 'home-taxa-rec-meta-valor',
+          idOlValor: 'home-taxa-rec-ol-valor',
+          idOlLegenda: 'home-taxa-rec-ol-legenda'
+        });
       homeDesenharTaxa('home-taxa-fai-svg', dados.meses, 'taxaFai', 'fai',
-        (dados.metas || {}).serieFai, (dados.metas || {}).taxaFai, (dados.oficial || {}).firstAid);
+        metasHome.serieFai, metasHome.taxaFai, (dados.oficial || {}).firstAid, {
+          origemMeta: metasHome.origem || '',
+          ol: olHome.erro ? null : olHome.taxaFai,
+          origemOl: olHome.origem || '',
+          idMetaValor: 'home-taxa-fai-meta-valor',
+          idOlValor: 'home-taxa-fai-ol-valor',
+          idOlLegenda: 'home-taxa-fai-ol-legenda'
+        });
       // Guardado porque a Rotina do Pilar é redesenhada quando o Route Map
       // chega (chamada própria, mais lenta) — sem o snapshot, o realizado de
       // Expansão S3 / Extensão S4 não teria como entrar sem refazer tudo.
@@ -3377,7 +3751,44 @@
      * Meses sem HHT lançado NÃO viram zero: ficam fora da linha, senão a
      * ausência de denominador seria lida como desempenho perfeito.
      */
-    function homeDesenharTaxa(idSvg, meses, campoTaxa, campoEventos, serieMeta, metaConstante, serieOficial) {
+    /**
+     * A Beatriz escreveu o OL com 4 casas (0,0914) e a meta com 3 (0,095). A 4ª
+     * casa só aparece quando ela existe de fato — arredondar 0,0914 para 0,091
+     * faria o número da tela divergir do que ela conferiu na planilha.
+     */
+    function homeFormatarTaxaLegenda_(valor) {
+      if (valor === null || valor === undefined || isNaN(valor)) return '—';
+      var texto = Number(valor).toFixed(4);
+      var ponto = texto.indexOf('.');
+      while (texto.length - ponto - 1 > 3 && texto.charAt(texto.length - 1) === '0') {
+        texto = texto.slice(0, -1);
+      }
+      return texto.replace('.', ',');
+    }
+
+    /**
+     * `extras`: { origemMeta, ol, origemOl, idMetaValor, idOlValor, idOlLegenda }.
+     * Virou objeto quando o OL entrou — a lista de posicionais já estava em oito
+     * e ninguém acerta a ordem de dez.
+     */
+    function homeDesenharTaxa(idSvg, meses, campoTaxa, campoEventos, serieMeta, metaConstante, serieOficial, extras) {
+      extras = extras || {};
+      var origemMeta = extras.origemMeta;
+      var ol = (extras.ol === null || extras.ol === undefined || isNaN(extras.ol)) ? null : Number(extras.ol);
+
+      // Legendas: o valor vai escrito ao lado do nome da série. A do OL some
+      // inteira quando não há OL — legenda anunciando o que não se desenha foi o
+      // problema que já corrigimos hoje no gráfico do RISK.
+      var elMeta = extras.idMetaValor ? document.getElementById(extras.idMetaValor) : null;
+      if (elMeta) {
+        elMeta.textContent = (metaConstante === null || metaConstante === undefined)
+          ? '' : ' ' + homeFormatarTaxaLegenda_(metaConstante);
+      }
+      var elOlLegenda = extras.idOlLegenda ? document.getElementById(extras.idOlLegenda) : null;
+      var elOl = extras.idOlValor ? document.getElementById(extras.idOlValor) : null;
+      if (elOl) elOl.textContent = ol === null ? '' : ' ' + homeFormatarTaxaLegenda_(ol);
+      if (elOlLegenda) elOlLegenda.classList[ol === null ? 'add' : 'remove']('hidden');
+
       var svg = document.getElementById(idSvg);
       if (!svg) return;
 
@@ -3420,6 +3831,9 @@
         if (p.valor !== null && p.valor !== undefined) maximo = Math.max(maximo, p.valor);
         if (p.meta !== null) maximo = Math.max(maximo, p.meta);
       });
+      // O OL entra na escala: hoje ele fica abaixo da meta nos dois cards, mas
+      // um OL acima do topo sairia da área de plotagem sem aviso nenhum.
+      if (ol !== null) maximo = Math.max(maximo, ol);
       var domMax = maximo > 0 ? maximo * 1.25 : 1;
 
       function x(i) { return margemEsq + (i / 11) * larguraPlot; }
@@ -3434,10 +3848,40 @@
         partes.push('<text x="' + (margemEsq - 8) + '" y="' + (yy + 3) + '" text-anchor="end" font-size="10" fill="#94a3b8">' + valorMarca.toFixed(2).replace('.', ',') + '</text>');
       }
 
-      var pontosMeta = pontos.filter(function (p) { return p.meta !== null; })
-        .map(function (p) { return x(p.indice) + ',' + y(p.meta); }).join(' ');
+      var comMeta = pontos.filter(function (p) { return p.meta !== null; });
+      var pontosMeta = comMeta.map(function (p) { return x(p.indice) + ',' + y(p.meta); }).join(' ');
       if (pontosMeta) {
-        partes.push('<polyline points="' + pontosMeta + '" fill="none" stroke="' + HOME_COR_META + '" stroke-width="2" stroke-dasharray="5 4" stroke-linejoin="round" />');
+        // A linha ganhou tooltip com a ORIGEM da meta: desde 2026-08-25 ela vem
+        // de uma célula da planilha de YTD, e o backend cai de volta no
+        // Scorecard se a leitura falhar. Sem isso, a troca de fonte — ou o
+        // fallback — aconteceria sem nada na tela dizendo qual está valendo.
+        var textoMeta = 'Meta ' + homeFormatarTaxa(comMeta[0].meta) +
+          (origemMeta ? ' · ' + origemMeta : '');
+        partes.push('<polyline points="' + pontosMeta + '" fill="none" stroke="' + HOME_COR_META +
+          '" stroke-width="2" stroke-dasharray="5 4" stroke-linejoin="round">' +
+          '<title>' + escaparHtml(textoMeta) + '</title></polyline>');
+      }
+
+      // OL = OUTLOOK, a projeção de fechamento do ANO — confirmado em 26/08/2026
+      // pelo `debugOlTaxas()`: o rótulo da linha 162 da planilha diz literalmente
+      // "outlook", e a linha traz HHT 6.565.107,031 e 30 eventos, com
+      // F162 = 30 x 200.000 / 6.565.107,031. Ou seja NÃO é meta: é onde o ano
+      // deve terminar se o ritmo atual se mantiver, e por isso o número MUDA
+      // quando a projeção é revista (o 0,883 do retorno da Beatriz era a mesma
+      // conta com 29 eventos). A sigla ficou nos identificadores; na TELA vai por
+      // extenso, porque "OL" não se decodifica sozinho.
+      //
+      // Distinta da meta pelo TRAÇO (pontilhado x tracejado) e por cor própria.
+      // O violeta não é enfeite: no portal vermelho/laranja/amarelo/azul carregam
+      // a convenção de gravidade e uma referência neutra não pode herdar isso —
+      // mas o cinza mais escuro que veio antes colava na meta (no card TRIR os
+      // dois valores ficam a menos de 4% um do outro e viravam uma faixa só).
+      if (ol !== null) {
+        var yOl = y(ol);
+        partes.push('<line x1="' + margemEsq + '" y1="' + yOl + '" x2="' + (margemEsq + larguraPlot) +
+          '" y2="' + yOl + '" stroke="' + HOME_COR_OL + '" stroke-width="2" stroke-dasharray="2 3">' +
+          '<title>' + escaparHtml('Outlook (projeção de fechamento do ano) ' + homeFormatarTaxaLegenda_(ol) +
+            (extras.origemOl ? ' · ' + extras.origemOl : '')) + '</title></line>');
       }
 
       partes.push('<polyline points="' + comValor.map(function (p) { return x(p.indice) + ',' + y(p.valor); }).join(' ') +
@@ -3874,7 +4318,9 @@
       elA.setAttribute('stroke-dashoffset', -arcoVencido);
       document.getElementById('ats-donut-total').textContent = formatarNumeroSvg_(total);
 
-      desenharParetoAts_('ats-pareto-gerente', d.porGerente);
+      if (!hierarquiaIndisponivel_('ats-pareto-gerente', d.hierarquia)) {
+        desenharParetoAts_('ats-pareto-gerente', d.porGerente);
+      }
       desenharParetoAts_('ats-pareto-area', d.porArea);
 
       // Índice da busca: montado a cada carga, com os registros já em mãos.
@@ -4100,21 +4546,18 @@
         .getOcorrenciasPainel(false);
     }
 
-    // Os quatro containers de conteúdo dos cards de Ocorrências. Todos recebem
-    // o MESMO tratamento de carregando/erro — antes o aviso morava só no card
-    // de status e os outros três ficavam como caixas vazias, o que parecia
-    // defeito de layout.
-    var OCOR_CONTAINERS_ = ['ocor-gravidade', 'ocor-pareto-gerente', 'ocor-partes', 'ocor-tabela-abertos'];
+    // Os containers de conteúdo dos cards de Ocorrências. Todos recebem o MESMO
+    // tratamento de carregando/erro — antes o aviso morava só no card de status
+    // e os outros ficavam como caixas vazias, o que parecia defeito de layout.
+    // 'ocor-tabela-abertos' saiu em 25/08/2026 com a tabela de abertos, que
+    // virou o Pareto por área.
+    var OCOR_CONTAINERS_ = ['ocor-pareto-gerente', 'ocor-partes', 'ocor-area-status'];
 
     function ocorPlaceholder_(texto, classe) {
       OCOR_CONTAINERS_.forEach(function (id) {
         var el = document.getElementById(id);
         if (!el) return;
-        // A tabela precisa de <tr><td>, não de <p>, senão o navegador joga o
-        // conteúdo pra fora do <tbody>.
-        el.innerHTML = (el.tagName === 'TBODY')
-          ? '<tr><td colspan="6" class="py-2 ' + classe + '">' + atsEscapar_(texto) + '</td></tr>'
-          : '<p class="text-xs ' + classe + '">' + atsEscapar_(texto) + '</p>';
+        el.innerHTML = '<p class="text-xs ' + classe + '">' + atsEscapar_(texto) + '</p>';
       });
     }
 
@@ -4202,10 +4645,14 @@
       return { topo: Math.ceil(max / passo) * passo, passo: passo };
     }
 
-    // Onde cada instância do gráfico mora. O painel da aba Áreas FAI / REC leva
-    // a linha de % acumulada; o Meu Feed é a versão enxuta, só as barras.
+    // Onde cada instância do gráfico mora. Desde 2026-08-25 NENHUMA das duas
+    // leva a linha de % acumulada — o usuário pediu para tirá-la do painel, e o
+    // feed já não a tinha. O suporte continua em desenharFaiRec_ (`acumulada`),
+    // então religar é trocar este false por true e devolver a entrada da legenda
+    // no card.
     var FAIREC_PAINEL_ = {
-      ids: { svg: 'ocor-fairec-svg', vazio: 'ocor-fairec-vazio', rodape: 'ocor-fairec-rodape' }
+      ids: { svg: 'ocor-fairec-svg', vazio: 'ocor-fairec-vazio', rodape: 'ocor-fairec-rodape' },
+      acumulada: false
     };
     // maxAnos protege o feed do crescimento da base: são 3 barras por ano numa
     // coluna de ~344px, então acima de 8 anos elas ficam finas demais pra ler.
@@ -4562,131 +5009,23 @@
       if (rodape) rodape.textContent = '';
     }
 
-    // ---------------------------------------------------------------------
-    // COMPORTAMENTO / CONDIÇÃO — pizza (item 6 do slide da Beatriz)
-    // ---------------------------------------------------------------------
-    // Duas hues DISTINTAS, não dois passos da mesma: aqui as categorias são
-    // categóricas (não há ordem entre condição e comportamento), e os tons que a
-    // Pirâmide usa nessas duas fatias (#0e8cc6 e #4499c0) são próximos demais
-    // pra carregar uma pizza. O azul da Condição é o MESMO da Pirâmide; o
-    // Comportamento vai no violeta que o portal já usa em todo o TAG Safety —
-    // que é justamente a base deste card.
-    var COMPCOND_COR_ = {
-      condicaoInsegura: '#0e8cc6',
-      comportamentoInseguro: '#5b21b6'
-    };
-
-    var compCondCarregadoUmaVez_ = false;
-
-    function carregarComportamentoCondicao_() {
-      if (compCondCarregadoUmaVez_) return;
-      compCondCarregadoUmaVez_ = true;
-      google.script.run
-        .withSuccessHandler(function (d) {
-          var dados = d || {};
-          if (dados.erro) { mostrarErroCompCond_(dados.erro); return; }
-          desenharComportamentoCondicao_(dados);
-        })
-        .withFailureHandler(function (e) {
-          compCondCarregadoUmaVez_ = false;
-          mostrarErroCompCond_(String(e && e.message ? e.message : e));
-        })
-        .getComportamentoCondicao(false);
-    }
-
-    /**
-     * Pizza (fatia cheia, não rosca — a rosca já é a linguagem do card de status
-     * das investigações logo acima, e repetir a forma faria os dois parecerem o
-     * mesmo indicador).
-     *
-     * Cada fatia é um <path> com arco: M centro -> L início -> A raio -> Z.
-     * `large-arc-flag` liga quando a fatia passa de 180°, senão o navegador
-     * desenha o arco menor e a fatia maior aparece invertida.
-     */
-    function desenharComportamentoCondicao_(dados) {
-      var vazio = document.getElementById('compcond-vazio');
-      var svg = document.getElementById('compcond-svg');
-      var legenda = document.getElementById('compcond-legenda');
-      var rodape = document.getElementById('compcond-rodape');
-      if (!svg || !vazio) return;
-
-      var itens = (dados && dados.itens) || [];
-      var total = dados.total || 0;
-      if (!itens.length || total <= 0) {
-        vazio.textContent = 'Sem apontamentos classificados nesta base.';
-        vazio.classList.remove('hidden');
-        svg.classList.add('hidden');
-        if (legenda) legenda.innerHTML = '';
-        if (rodape) rodape.textContent = '';
-        return;
-      }
-      vazio.classList.add('hidden');
-      svg.classList.remove('hidden');
-
-      var cx = 60, cy = 60, r = 54;
-      var anguloAtual = -Math.PI / 2;   // começa às 12h
-      var fatias = '', linhasLegenda = '';
-
-      itens.forEach(function (item) {
-        var fracao = item.total / total;
-        var cor = COMPCOND_COR_[item.chave] || '#94a3b8';
-
-        // Uma categoria sozinha com 100% vira círculo: o path de arco degenera
-        // quando início e fim coincidem, e a fatia sumiria.
-        if (fracao >= 0.999) {
-          fatias += '<circle cx="' + cx + '" cy="' + cy + '" r="' + r + '" fill="' + cor + '">' +
-            '<title>' + atsEscapar_(item.nome) + ': ' + item.total + ' (100%)</title></circle>';
-        } else {
-          var anguloFim = anguloAtual + fracao * 2 * Math.PI;
-          var x1 = cx + r * Math.cos(anguloAtual), y1 = cy + r * Math.sin(anguloAtual);
-          var x2 = cx + r * Math.cos(anguloFim), y2 = cy + r * Math.sin(anguloFim);
-          var arcoGrande = fracao > 0.5 ? 1 : 0;
-          fatias += '<path d="M ' + cx + ' ' + cy + ' L ' + x1 + ' ' + y1 +
-            ' A ' + r + ' ' + r + ' 0 ' + arcoGrande + ' 1 ' + x2 + ' ' + y2 + ' Z"' +
-            ' fill="' + cor + '" stroke="#fff" stroke-width="1.5">' +
-            '<title>' + atsEscapar_(item.nome) + ': ' + item.total +
-            ' (' + item.pct.toFixed(1) + '%)</title></path>';
-          anguloAtual = anguloFim;
-        }
-
-        linhasLegenda += '<div class="flex items-center gap-2">' +
-          '<span class="inline-block w-3 h-3 rounded-sm shrink-0" style="background:' + cor + '"></span>' +
-          '<span class="text-slate-600 font-semibold">' + atsEscapar_(item.nome) + '</span>' +
-          '<span class="ml-auto font-bold text-brand-primary" style="font-variant-numeric: tabular-nums;">' +
-          formatarNumeroSvg_(item.total) + '</span>' +
-          '<span class="text-slate-400 w-12 text-right" style="font-variant-numeric: tabular-nums;">' +
-          item.pct.toFixed(1) + '%</span>' +
-        '</div>';
-      });
-
-      svg.innerHTML = fatias;
-      if (legenda) legenda.innerHTML = linhasLegenda;
-
-      var chip = document.getElementById('compcond-chip');
-      if (chip) {
-        chip.textContent = formatarNumeroSvg_(total) + ' apontamentos';
-        chip.classList.remove('hidden');
-      }
-
-      if (rodape) {
-        var p = (dados && dados.periodo) || {};
-        // Dizer a BASE é obrigatório aqui: os outros cards desta aba são de
-        // ocorrências (acidentes) e este é de TAG (observação preventiva).
-        // Sem isso, os totais parecem incoerentes entre cards vizinhos.
-        rodape.textContent = 'Base TAG SAF (apontamentos de observação, não ocorrências)' +
-          (p.de ? ' · período ' + p.de + ' a ' + p.ate : '') +
-          ' · "Ato Seguro" não entra nesta distribuição.';
-      }
-    }
+    // O card COMPORTAMENTO / CONDIÇÃO (pizza da TAG SAF) foi retirado em
+    // 25/08/2026 a pedido da Beatriz. O renderizador saiu junto; o backend
+    // getComportamentoCondicao segue no Code.js, dormindo.
 
     // ---------------------------------------------------------------------
     // OBJETO CAUSADOR — Pareto de colunas + nuvem de palavras (coluna BO)
     // ---------------------------------------------------------------------
-    // Mesma rampa da causa raiz: o dado é MAGNITUDE, então um hue só, claro ->
-    // escuro, com piso de tinta pra cauda longa não sumir.
+    // Nome do balde de RESTO, que sai do gráfico e vive no rodapé (25/08/2026).
+    // Tem de casar com OBJETO_CAUSADOR_CATEGORIA_RESTO_ do Code.js.
+    var OBJCAUSA_NOME_RESTO_ = 'Outros';
+
+    // A rampa azul continua servindo a NUVEM DE PALAVRAS (magnitude, um hue só,
+    // claro -> escuro, com piso de tinta pra cauda longa não sumir). As COLUNAS
+    // do Pareto deixaram de usá-la em 25/08: passaram a ser empilhadas por tipo
+    // de ocorrência, nas cores de gravidade (AREAS_TIPO_SERIES_). A cor virou
+    // categoria; a magnitude já estava na altura.
     var OBJCAUSA_RAMPA_ = ['#a9cde4', '#0d436b'];
-    var OBJCAUSA_COR_RESTO_ = '#94a3b8';   // "Outros" nunca na cor da série
-    var OBJCAUSA_COR_ACUM_ = '#0d436b';
 
     var objCausaCarregadoUmaVez_ = false;
 
@@ -4742,7 +5081,15 @@
       var rodape = document.getElementById('objcausa-rodape');
       if (!svg || !vazio) return;
 
-      var linhas = (dados && dados.categorias) || [];
+      // "Outros" é o balde de RESTO — objeto preenchido que o dicionário não
+      // classificou. A Beatriz pediu para tirá-lo do gráfico em 25/08 (o X
+      // vermelho na barra): ele não é uma categoria de verdade e, sendo a 2ª
+      // maior, distorcia a leitura do Pareto. O total dele continua no RODAPÉ,
+      // porque é a medida de quanto o dicionário ainda não cobre.
+      var todas = (dados && dados.categorias) || [];
+      var resto = todas.filter(function (l) { return l.nome === OBJCAUSA_NOME_RESTO_; })[0] || null;
+      var linhas = todas.filter(function (l) { return l.nome !== OBJCAUSA_NOME_RESTO_; });
+
       if (!linhas.length) {
         vazio.textContent = 'Nenhum objeto causador preenchido nesta base.';
         vazio.classList.remove('hidden');
@@ -4753,14 +5100,14 @@
       vazio.classList.add('hidden');
       svg.classList.remove('hidden');
 
-      var W = 720, H = 300, L = 44, R = 48, T = 24, B = 54;
+      // Margem direita menor: sem a linha de % acumulada não há eixo direito.
+      var W = 720, H = 300, L = 44, R = 16, T = 24, B = 54;
       var x0 = L, x1 = W - R, y0 = T, y1 = H - B;
       var larg = x1 - x0, alt = y1 - y0;
 
       var max = linhas[0].total || 1;
       var esc = escalaTopoFaiRec_(max);            // mesma escala "redonda" do outro Pareto
       var yQtd = function (v) { return y1 - (v / esc.topo) * alt; };
-      var yPct = function (p) { return y1 - (p / 100) * alt; };
 
       var slot = larg / linhas.length;
       var lb = Math.min(slot * 0.56, 74);
@@ -4773,28 +5120,49 @@
         partes.push('<text x="' + (x0 - 8) + '" y="' + (gy + 3.5) +
           '" text-anchor="end" font-size="10" fill="#94a3b8">' + v + '</text>');
       }
-      [0, 25, 50, 75, 100].forEach(function (p) {
-        partes.push('<text x="' + (x1 + 8) + '" y="' + (yPct(p) + 3.5) +
-          '" text-anchor="start" font-size="10" fill="#94a3b8">' + p + '%</text>');
-      });
 
       linhas.forEach(function (l, i) {
         var centro = x0 + slot * i + slot / 2;
-        var topo = yQtd(l.total);
-        // "Outros" é balde de RESTO, não uma categoria de verdade: sai em cinza
-        // pra não competir visualmente com as categorias reais.
-        var cor;
-        if (l.nome === 'Outros') {
-          cor = OBJCAUSA_COR_RESTO_;
+        var esquerda = centro - lb / 2;
+
+        // Barra EMPILHADA por tipo de ocorrência, nas cores de gravidade — as
+        // mesmas do card FAI × Recordable e do Pareto por área. A rampa azul de
+        // antes classificava por MAGNITUDE (barra maior, tom mais escuro), que
+        // agora seria informação repetida: a altura já diz isso, e a cor passou
+        // a carregar o tipo.
+        //
+        // Empilha de baixo para cima na ordem de gravidade decrescente, então o
+        // vermelho fica na base — é o que se procura primeiro.
+        // `campoOcor`, não `campo`: este payload vem da aba de Ocorrências.
+        var somaTipos = AREAS_TIPO_SERIES_.reduce(function (a, s) { return a + (l[s.campoOcor] || 0); }, 0);
+        if (somaTipos > 0) {
+          var base = y1;
+          AREAS_TIPO_SERIES_.forEach(function (s) {
+            var v = l[s.campoOcor] || 0;
+            if (!v) return;
+            var altura = (v / esc.topo) * alt;
+            base -= altura;
+            partes.push('<rect x="' + esquerda + '" y="' + base + '" width="' + lb +
+              '" height="' + Math.max(altura, 1) + '" fill="' + s.cor +
+              '" stroke="' + s.borda + '" stroke-width="0.5">' +
+              '<title>' + atsEscapar_(l.nome) + ' — ' + s.rotulo + ': ' + v + '</title></rect>');
+          });
         } else {
-          var rgb = corSequencial_(OBJCAUSA_RAMPA_, 0.30 + 0.70 * (l.total / max));
-          cor = 'rgb(' + rgb.r + ',' + rgb.g + ',' + rgb.b + ')';
+          // Backend sem a quebra por tipo (ver `temTipos`): barra inteira num
+          // tom neutro. Pintar com a cor de uma das três séries afirmaria uma
+          // gravidade que ninguém mediu.
+          var topoNeutro = yQtd(l.total);
+          partes.push('<rect x="' + esquerda + '" y="' + topoNeutro + '" width="' + lb +
+            '" height="' + Math.max(y1 - topoNeutro, 1) + '" fill="#94a3b8" rx="2"></rect>');
         }
 
-        partes.push('<rect x="' + (centro - lb / 2) + '" y="' + topo + '" width="' + lb +
-          '" height="' + Math.max(y1 - topo, 1) + '" fill="' + cor + '" rx="2">' +
+        // Total acima da coluna, com o tooltip do conjunto numa faixa invisível
+        // sobre a barra inteira (cada segmento tem o seu, este dá o agregado).
+        var topo = yQtd(l.total);
+        partes.push('<rect x="' + esquerda + '" y="' + topo + '" width="' + lb +
+          '" height="' + Math.max(y1 - topo, 1) + '" fill="transparent">' +
           '<title>' + atsEscapar_(l.nome) + ': ' + l.total +
-          ' (' + l.pct.toFixed(1) + '% | acum ' + l.pctAcumulada.toFixed(1) + '%)</title></rect>');
+          ' (' + l.pct.toFixed(1) + '% do total com objeto preenchido)</title></rect>');
         partes.push('<text x="' + centro + '" y="' + (topo - 5) +
           '" text-anchor="middle" font-size="11" font-weight="700" fill="#475569"' +
           ' style="font-variant-numeric: tabular-nums">' + l.total + '</text>');
@@ -4806,17 +5174,6 @@
         });
       });
 
-      var pontos = linhas.map(function (l, i) {
-        return (x0 + slot * i + slot / 2) + ',' + yPct(l.pctAcumulada || 0);
-      });
-      partes.push('<polyline points="' + pontos.join(' ') + '" fill="none" stroke="' +
-        OBJCAUSA_COR_ACUM_ + '" stroke-width="2" stroke-linejoin="round"></polyline>');
-      linhas.forEach(function (l, i) {
-        partes.push('<circle cx="' + (x0 + slot * i + slot / 2) + '" cy="' + yPct(l.pctAcumulada || 0) +
-          '" r="3" fill="#fff" stroke="' + OBJCAUSA_COR_ACUM_ + '" stroke-width="2"><title>' +
-          atsEscapar_(l.nome) + ' — ' + Math.round(l.pctAcumulada || 0) + '% acumulado</title></circle>');
-      });
-
       partes.push('<line x1="' + x0 + '" y1="' + y1 + '" x2="' + x1 + '" y2="' + y1 +
         '" stroke="#cbd5e1" stroke-width="1"></line>');
       svg.innerHTML = partes.join('');
@@ -4826,6 +5183,13 @@
           ' · ' + formatarNumeroSvg_(dados.distintos || 0) + ' textos distintos';
         if (dados.ignoradasVazias) {
           texto += ' · ' + formatarNumeroSvg_(dados.ignoradasVazias) + ' sem preenchimento';
+        }
+        // "Outros" saiu do gráfico, mas o número precisa continuar visível: ele
+        // mede o que o dicionário de classificação ainda NÃO cobre. Omiti-lo
+        // faria as barras parecerem o total.
+        if (resto && resto.total) {
+          texto += ' · ' + formatarNumeroSvg_(resto.total) + ' em "' + OBJCAUSA_NOME_RESTO_ +
+            '", fora do gráfico';
         }
         var diag = dados.diagnostico || {};
         texto += (diag.origemColuna === 'posicao_BO')
@@ -4897,19 +5261,6 @@
       if (nuvem) nuvem.innerHTML = '<p class="text-xs text-red-500">Dados indisponíveis.</p>';
     }
 
-    function mostrarErroCompCond_(msg) {
-      var vazio = document.getElementById('compcond-vazio');
-      var svg = document.getElementById('compcond-svg');
-      var legenda = document.getElementById('compcond-legenda');
-      if (svg) svg.classList.add('hidden');
-      if (legenda) legenda.innerHTML = '';
-      if (vazio) {
-        vazio.textContent = 'Não foi possível carregar comportamento/condição: ' + msg;
-        vazio.className = 'text-xs text-red-500';
-        vazio.classList.remove('hidden');
-      }
-    }
-
     function mostrarErroFaiRec_(msg) {
       [FAIREC_PAINEL_, FAIREC_FEED_].forEach(function (alvo) {
         var vazio = document.getElementById(alvo.ids.vazio);
@@ -4962,39 +5313,76 @@
       document.getElementById('ocor-status-legenda').innerHTML = legenda ||
         '<p class="text-slate-400">Sem status registrado.</p>';
 
-      desenharBarrasOcor_('ocor-gravidade', d.porGravidade, OCOR_COR_NEUTRA_, false);
-      desenharBarrasOcor_('ocor-pareto-gerente', d.porGerente, OCOR_COR_NEUTRA_, true);
+      // `d.porGravidade` continua chegando do backend, mas o card que o exibia
+      // foi retirado em 25/08/2026 a pedido da Beatriz.
+      if (!hierarquiaIndisponivel_('ocor-pareto-gerente', d.hierarquia)) {
+        desenharBarrasOcor_('ocor-pareto-gerente', d.porGerente, OCOR_COR_NEUTRA_, true);
+      }
       desenharBarrasOcor_('ocor-partes', d.porParteCorpo, OCOR_COR_NEUTRA_, false);
 
       var chip = document.getElementById('ocor-abertos-chip');
       chip.textContent = formatarNumeroSvg_(d.totalAbertos || 0) + ' em aberto';
 
-      var corpo = document.getElementById('ocor-tabela-abertos');
-      var abertos = d.abertos || [];
-      corpo.innerHTML = abertos.length ? abertos.map(function (o) {
-        var cor = OCOR_COR_STATUS_[ocorNormalizar_(o.status)] || '#94a3b8';
-        return '<tr class="border-b border-slate-50">' +
-          // truncate precisa de largura definida: quem define é o <colgroup>
-          // da tabela (table-fixed), não um max-w por célula.
-          '<td class="py-1 pr-2 text-slate-500 whitespace-nowrap">' + atsEscapar_(o.data) + '</td>' +
-          '<td class="py-1 pr-2 text-slate-600 truncate" title="' + atsEscapar_(o.supervisor) + '">' + atsEscapar_(o.supervisor) + '</td>' +
-          '<td class="py-1 pr-2 text-slate-500 truncate" title="' + atsEscapar_(o.gerente) + '">' + atsEscapar_(o.gerente) + '</td>' +
-          '<td class="py-1 pr-2 text-slate-500 truncate" title="' + atsEscapar_(o.area) + '">' + atsEscapar_(o.area) + '</td>' +
-          '<td class="py-1 pr-2 text-slate-500 truncate" title="' + atsEscapar_(o.gravidade) + '">' + atsEscapar_(o.gravidade) + '</td>' +
-          // Status com bolinha E texto — cor nunca sozinha. O texto trunca, mas
-          // a bolinha já distingue os três estados de relance.
-          '<td class="py-1 truncate" title="' + atsEscapar_(o.status) + '"><span class="inline-block w-2 h-2 rounded-full mr-1 align-middle shrink-0" style="background:' + cor + '"></span>' + atsEscapar_(o.status) + '</td>' +
-        '</tr>';
-      }).join('') : '<tr><td colspan="6" class="py-2 text-slate-400">Nenhuma ocorrência em aberto.</td></tr>';
+      desenharAreasPorStatus_(d.porAreaStatus || []);
 
       // Rodapé expõe as folgas em vez de escondê-las.
       var rodape = [];
       if (d.periodo && d.periodo.de) rodape.push('período ' + d.periodo.de + ' a ' + d.periodo.ate + ' (base inteira, sem filtro de ano)');
       rodape.push(formatarNumeroSvg_(d.linhasLidas || 0) + ' linha(s) lidas');
-      if (d.totalAbertos > d.abertosExibidos) rodape.push('tabela limitada às ' + d.abertosExibidos + ' mais recentes');
       if (d.semGerente > 0) rodape.push(d.semGerente + ' sem gerente mapeado');
       if (d.semSupervisor > 0) rodape.push(d.semSupervisor + ' sem supervisor preenchido');
       document.getElementById('ocor-rodape').textContent = rodape.join(' · ');
+    }
+
+    /**
+     * Pareto por área, empilhado pelo Follow-up Status, nas MESMAS cores da rosca
+     * de Investigações (25/08/2026). Substituiu a tabela de abertos.
+     *
+     * A ordem dos segmentos é FIXA (fechado -> aberto -> não iniciado), não a
+     * ordem em que os status aparecem no dado: sem isso, cada barra empilharia
+     * numa sequência diferente e a comparação entre áreas ficaria impossível.
+     * Status fora dos três conhecidos entram depois, em cinza, em vez de sumir.
+     */
+    var OCOR_STATUS_ORDEM_ = ['closed', 'open', 'not initiated'];
+
+    function desenharAreasPorStatus_(linhas) {
+      var container = document.getElementById('ocor-area-status');
+      if (!container) return;
+
+      if (!linhas.length) {
+        container.innerHTML = '<p class="text-xs text-slate-400">Nenhuma ocorrência registrada.</p>';
+        return;
+      }
+
+      var maiorTotal = linhas[0].total || 1;   // o backend já entrega ordenado desc
+
+      container.innerHTML = linhas.map(function (l) {
+        var nomes = Object.keys(l.status || {});
+        nomes.sort(function (a, b) {
+          var ia = OCOR_STATUS_ORDEM_.indexOf(ocorNormalizar_(a));
+          var ib = OCOR_STATUS_ORDEM_.indexOf(ocorNormalizar_(b));
+          return (ia === -1 ? 99 : ia) - (ib === -1 ? 99 : ib);
+        });
+
+        var segmentos = nomes.map(function (nome) {
+          var v = l.status[nome];
+          if (!v) return '';
+          var pct = (v / maiorTotal) * 100;
+          var cor = OCOR_COR_STATUS_[ocorNormalizar_(nome)] || '#94a3b8';
+          return '<div class="h-5 flex items-center justify-center text-[9px] font-bold text-white shrink-0" ' +
+            'style="width:' + pct + '%;background:' + cor + '" ' +
+            'title="' + atsEscapar_(l.area) + ' — ' + atsEscapar_(nome) + ': ' + v + '">' +
+            (pct >= 4 ? v : '') + '</div>';
+        }).join('');
+
+        return '<div class="flex items-center gap-2 py-0.5">' +
+          '<span class="w-40 shrink-0 text-[10.5px] text-slate-600 truncate" title="' + atsEscapar_(l.area) + '">' +
+            atsEscapar_(l.area) + '</span>' +
+          '<div class="flex-1 min-w-0 flex rounded-sm overflow-hidden bg-slate-50">' + segmentos + '</div>' +
+          '<span class="w-8 shrink-0 text-right text-[10.5px] font-bold text-brand-primary" ' +
+            'style="font-variant-numeric: tabular-nums">' + l.total + '</span>' +
+          '</div>';
+      }).join('');
     }
 
     // ---------------------------------------------------------------------
@@ -5053,7 +5441,6 @@
       carregarOcorrenciasPainel_();
       carregarFaiRec_();
       carregarCausaRaiz_();
-      carregarComportamentoCondicao_();
       carregarObjetoCausador_();
       window.scrollTo({ top: 0, behavior: 'smooth' });
 
@@ -5291,8 +5678,10 @@
       }).join('');
     }
 
-    // Meta x Realizado acumulado. Duas séries no MESMO eixo (ambas são
-    // "quantidade acumulada"), Meta como referência tracejada cinza.
+    // Realizado acumulado. A série de Meta continua chegando no payload e
+    // aparece no tooltip de cada ponto, mas a linha tracejada dela foi desligada
+    // em 2026-08-25 — pra religar, descomentar o polyline de pontosMeta abaixo e
+    // devolver a legenda "Meta" ao cabeçalho do card.
     function riskDesenharAvanco(serie) {
       var svg = document.getElementById('risk-avanco-svg');
       if (!svg) return;
@@ -5308,9 +5697,12 @@
       var alturaPlot = altura - margemTopo - margemBase;
       var eixoBase = margemTopo + alturaPlot;
 
+      // O eixo escala só pelo Realizado: com a linha da Meta desligada, incluir
+      // a meta aqui achatava a curva desenhada contra a base e deixava um vazio
+      // no topo, sem nada explicando de onde vinha a folga.
       var maximo = 0;
       serie.forEach(function (p) {
-        maximo = Math.max(maximo, p.meta || 0, p.realizado || 0);
+        maximo = Math.max(maximo, p.realizado || 0);
       });
       var domMax = Math.max(maximo * 1.1, 10);
 
@@ -5328,7 +5720,7 @@
       var pontosMeta = serie.map(function (p, i) { return x(i) + ',' + y(p.meta || 0); }).join(' ');
       var pontosReal = serie.map(function (p, i) { return x(i) + ',' + y(p.realizado || 0); }).join(' ');
 
-      partes.push('<polyline points="' + pontosMeta + '" fill="none" stroke="#94a3b8" stroke-width="2" stroke-dasharray="5 4" stroke-linejoin="round" />');
+      //partes.push('<polyline points="' + pontosMeta + '" fill="none" stroke="#94a3b8" stroke-width="2" stroke-dasharray="5 4" stroke-linejoin="round" />');
       partes.push('<polyline points="' + pontosReal + '" fill="none" stroke="#00a0dd" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" />');
 
       // Marcadores só no Realizado (a Meta é referência, não precisa de ponto a ponto).
@@ -5481,12 +5873,131 @@
       if (valorSelecionado === 'Todas' || (departamentos || []).indexOf(valorSelecionado) !== -1) {
         select.value = valorSelecionado;
       }
-      select.onchange = renderizarCruzLocal;
+      select.onchange = function () {
+        renderizarCruzLocal();
+        sincronizarAreaEntreCards_('cruz-select-departamento');
+      };
     }
 
-    // Filtro PRÓPRIO da Pirâmide (Área + Período) — independente do filtro de
-    // Área/Mês da Cruz acima, não interagem entre si. Mesma lista de áreas
-    // (já deduplicada no servidor), mas seleção separada.
+    /* ------------------------------------------------------------------
+       FILTRO DE ÁREA COMPARTILHADO (25/08/2026)
+       Cruz, Pirâmide e Boneco tinham cada um o seu select de área e não
+       conversavam. Agora os três apontam sempre para a MESMA área: mexer em
+       qualquer um leva os outros junto.
+
+       Por que só agora foi possível: a Pirâmide já usava a lista da Cruz, mas o
+       Boneco agrupava pela coluna `Area` da base de Ocorrências, que é o nível
+       LINHA ("LINHA 8"), enquanto a Cruz filtra por DEPARTAMENTO. Trocar o
+       Boneco para a coluna BC ("Employee Dept, Area (WHERE)") — mesma taxonomia
+       da Cruz — foi o que fez os três falarem a mesma língua.
+
+       Os selects continuam existindo nos três cards de propósito: cada um segue
+       utilizável sozinho, e quem mexe num vê os outros acompanharem.
+
+       CUIDADO: nem toda área da Cruz existe na base do Boneco (medido: sobram
+       "Fabricação Lavanderia" e "Fabricação Cocção", entre outras). Quando isso
+       acontece o Boneco AVISA em vez de mostrar um corpo vazio — ver
+       bonecoAvisarAreaSemDados_.
+       ------------------------------------------------------------------ */
+    var sincronizandoArea_ = false;
+
+    /**
+     * Chave de comparação de área — espelha normalizarChaveTexto_ do Code.js.
+     *
+     * COMPARAR POR TEXTO EXATO NÃO FUNCIONA, e isso custou um defeito em
+     * produção (25/08/2026): a Cruz mostra "Logística Interna" e a base de
+     * Ocorrências mostra "LOGISTICA INTERNA". É a MESMA área — as duas bases
+     * canonicalizam separadamente e cada uma elege o rótulo entre as grafias que
+     * ELA tem. O card acusava "não existe na base de ocorrências" para uma área
+     * com 77 registros lá.
+     */
+    function areaChave_(texto) {
+      return String(texto || '')
+        .toLowerCase()
+        .normalize('NFD')
+        .replace(/[̀-ͯ]/g, '')
+        .replace(/[^a-z0-9]+/g, ' ')
+        .trim();
+    }
+
+    /** A option do select cuja área é equivalente à procurada, ou null. */
+    function acharOpcaoDeArea_(select, area) {
+      if (!select) return null;
+      var alvo = areaChave_(area);
+      for (var i = 0; i < select.options.length; i++) {
+        if (areaChave_(select.options[i].value) === alvo) return select.options[i];
+      }
+      return null;
+    }
+
+    function sincronizarAreaEntreCards_(origem) {
+      if (sincronizandoArea_) return;   // trava de reentrância: um select mexe no outro, que dispara o onchange
+      sincronizandoArea_ = true;
+
+      try {
+        var area = (document.getElementById(origem) || {}).value || 'Todas';
+
+        var alvos = [
+          { id: 'cruz-select-departamento', redesenhar: renderizarCruzLocal },
+          { id: 'piramide-select-area', redesenhar: renderizarPiramideLocal },
+          // Redesenha direto, sem passar por onBonecoAreaAlterada: aquele
+          // dispara a sincronização de volta, e a trava já barraria — mas
+          // depender da trava para não entrar em laço é frágil.
+          { id: 'boneco-select-area', redesenhar: renderizarBonecoPartesDoCorpo }
+        ];
+
+        alvos.forEach(function (alvo) {
+          if (alvo.id === origem) return;
+          var select = document.getElementById(alvo.id);
+          if (!select) return;
+
+          // Casa por CHAVE, não por texto: cada base escreve a mesma área do seu
+          // jeito. E usa o `value` da própria option — atribuir a grafia da
+          // outra base deixaria o select num valor que ele não tem, e o
+          // navegador zera isso calado.
+          //
+          // Área sem equivalente cai em "Todas": é o caso das que só a Cruz tem.
+          // Melhor mostrar tudo e avisar do que exibir um recorte vazio.
+          var opcao = acharOpcaoDeArea_(select, area);
+          var novo = opcao ? opcao.value : 'Todas';
+          if (select.value === novo) return;
+
+          select.value = novo;
+          if (alvo.redesenhar) alvo.redesenhar();
+        });
+
+        bonecoAvisarAreaSemDados_(area);
+      } finally {
+        sincronizandoArea_ = false;
+      }
+    }
+
+    /**
+     * Aviso quando a área escolhida na Cruz não existe na base do Boneco. Sem
+     * ele, o card mostraria um corpo sem nenhuma marcação — que se lê como
+     * "nenhuma lesão nesta área", quando o certo é "esta área não é registrada
+     * naquela base".
+     */
+    function bonecoAvisarAreaSemDados_(area) {
+      var aviso = document.getElementById('boneco-aviso-area');
+      if (!aviso) return;
+
+      var select = document.getElementById('boneco-select-area');
+      // Por CHAVE: "Logística Interna" e "LOGISTICA INTERNA" são a mesma área.
+      var existe = !select || areaChave_(area) === 'todas' || !!acharOpcaoDeArea_(select, area);
+
+      if (existe) {
+        aviso.classList.add('hidden');
+        aviso.textContent = '';
+        return;
+      }
+      aviso.textContent = '"' + area + '" não existe na base de ocorrências — o boneco está mostrando todas as áreas.';
+      aviso.classList.remove('hidden');
+    }
+
+    // Filtro da Pirâmide (Área + Período). A ÁREA é compartilhada com a Cruz e o
+    // Boneco desde 25/08/2026; o PERÍODO continua próprio (a Cruz filtra por mês
+    // e a Pirâmide aceita "todo o período", que a Cruz não tem).
     function preencherSelectAreaPiramide(departamentos, valorSelecionado) {
       var select = document.getElementById('piramide-select-area');
       select.innerHTML = '<option value="Todas">Todas as áreas</option>';
@@ -5499,7 +6010,10 @@
       if (valorSelecionado === 'Todas' || (departamentos || []).indexOf(valorSelecionado) !== -1) {
         select.value = valorSelecionado;
       }
-      select.onchange = renderizarPiramideLocal;
+      select.onchange = function () {
+        renderizarPiramideLocal();
+        sincronizarAreaEntreCards_('piramide-select-area');
+      };
     }
 
     // "Todo o período" é o padrão ao carregar a página — soma os 12 meses do
@@ -5600,8 +6114,7 @@
       // O detalhamento por classificação (A/B/C) e por área saiu daqui e virou
       // esses 3 gráficos, pra não repetir o mesmo número em dois lugares.
       renderizarTagSafety();
-      renderizarHeatmapAreas('fai-heatmap', 'fai-heatmap-max', areas, totaisPorArea, 'amarelo', FAI_RAMPA_);
-      renderizarHeatmapAreas('rec-heatmap', 'rec-heatmap-max', areas, totaisPorArea, 'laranja', REC_RAMPA_);
+      renderizarAreasPorTipo(areas, totaisPorArea);
     }
 
     /* ==========================================================================
@@ -5609,12 +6122,11 @@
        Todos cobrem o ano inteiro do Ano selecionado; não usam Mês/Área.
        ========================================================================== */
 
-    // Ramps sequenciais (claro -> escuro, UM hue só). O hue de cada um é o mesmo
-    // da categoria correspondente na Cruz: âmbar = Primeiros Socorros, laranja =
-    // Acidente sem afastamento. Ramp sequencial (e não 12 cores categóricas para
-    // os 12 meses) porque o dado é magnitude, e 12 hues seria ilegível.
-    var FAI_RAMPA_ = ['#fff8e6', '#7c4a03'];
-    var REC_RAMPA_ = ['#fff4e6', '#9a3412'];
+    // FAI_RAMPA_ / REC_RAMPA_ saíram em 25/08/2026 junto com os dois heatmaps
+    // área × mês que elas pintavam (viraram o Pareto "Ocorrências por área").
+    // Se um heatmap de gravidade voltar, os hues eram âmbar #fff8e6 -> #7c4a03
+    // (Primeiros Socorros) e laranja #fff4e6 -> #9a3412 (Acidente sem
+    // afastamento), os mesmos das categorias na Cruz.
 
     // Rampa sequencial do TAG Safety. Os 5 passos foram VALIDADOS com
     // scripts/validate_palette.js --ordinal (L monótona, ΔL >= 0.06, hue único,
@@ -5624,8 +6136,8 @@
     var TAG_SAFETY_COR_BARRA_ = '#7c3aed';
 
     // Rampa do heatmap Área × Mês: violeta, no formato de EXTREMOS (claro, escuro)
-    // porque corSequencial_ interpola entre os dois — mesmo formato de
-    // FAI_RAMPA_/REC_RAMPA_. Hue escolhido pra bater com a Condição/Comportamento
+    // porque corSequencial_ interpola entre os dois.
+    // Hue escolhido pra bater com a Condição/Comportamento
     // Inseguro da Pirâmide, amarrando os dois cards. A monotonia de luminosidade
     // é garantida pela própria interpolação, e a célula zerada tem tratamento à
     // parte (cinza), então o extremo claro nunca precisa se distinguir do vazio.
@@ -5750,20 +6262,92 @@
       return (Math.round(Number(valor) || 0)).toLocaleString('pt-BR');
     }
 
-    // Mapa de calor Área × Mês de um campo (amarelo = FAI, laranja = REC).
-    // Só entram áreas com pelo menos uma ocorrência no ano — senão a tabela fica
-    // dominada por linhas zeradas.
-    function renderizarHeatmapAreas(idContainer, idMax, areas, totaisPorArea, campo, rampa) {
-      var linhas = areas.map(function (area) {
-        var totaisMeses = totaisPorArea[area] || {};
-        var valores = [];
-        for (var mes = 1; mes <= 12; mes++) {
-          valores.push((totaisMeses[mes] && totaisMeses[mes][campo]) || 0);
-        }
-        return { area: area, valores: valores };
-      });
+    /* ------------------------------------------------------------------
+       OCORRÊNCIAS POR ÁREA × TIPO — Pareto empilhado (25/08/2026).
+       Substituiu os dois mapas de calor área × mês. Mesmas três séries e as
+       MESMAS cores do card FAI × Recordable, na convenção de gravidade do
+       portal — os dois cards falam da mesma base e não podem divergir de cor.
+       ------------------------------------------------------------------ */
+    // DOIS nomes de campo por série, de propósito: os mesmos três tipos chegam
+    // com nomes diferentes conforme a fonte. `campo` é o nome de COR usado nos
+    // totais da Cruz (vermelho/laranja/amarelo); `campoOcor` é o nome usado no
+    // payload da aba de Ocorrências (comAfastamento/...). Uma lista só garante
+    // que cor e rótulo não divirjam entre os cards que falam da mesma coisa.
+    var AREAS_TIPO_SERIES_ = [
+      { campo: 'vermelho', campoOcor: 'comAfastamento',    rotulo: 'Com afastamento',    cor: '#e53935', borda: '#c62828' },
+      { campo: 'laranja',  campoOcor: 'semAfastamento',    rotulo: 'Sem afastamento',    cor: '#fb8c00', borda: '#c76a00' },
+      { campo: 'amarelo',  campoOcor: 'primeirosSocorros', rotulo: 'Primeiros socorros', cor: '#fdd835', borda: '#c9a800' }
+    ];
 
-      desenharHeatmapAreaMes_(idContainer, idMax, linhas, rampa, 'Nenhuma ocorrência registrada no ano.');
+    /**
+     * Uma barra por área, segmentada por tipo, ordenada do maior total para o
+     * menor. Área sem nenhuma das três ocorrências fica de fora — a lista
+     * existe para mostrar onde ACONTECE, não para listar a planta inteira.
+     */
+    function renderizarAreasPorTipo(areas, totaisPorArea) {
+      var container = document.getElementById('areas-tipo');
+      var vazio = document.getElementById('areas-tipo-vazio');
+      var rodape = document.getElementById('areas-tipo-rodape');
+      if (!container || !vazio) return;
+
+      var linhas = (areas || []).map(function (area) {
+        var meses = totaisPorArea[area] || {};
+        var valores = {};
+        var total = 0;
+        AREAS_TIPO_SERIES_.forEach(function (s) {
+          var soma = 0;
+          for (var mes = 1; mes <= 12; mes++) soma += (meses[mes] && meses[mes][s.campo]) || 0;
+          valores[s.campo] = soma;
+          total += soma;
+        });
+        return { area: area, valores: valores, total: total };
+      }).filter(function (l) { return l.total > 0; })
+        .sort(function (a, b) { return b.total - a.total; });
+
+      if (!linhas.length) {
+        vazio.classList.remove('hidden');
+        container.innerHTML = '';
+        if (rodape) rodape.textContent = '';
+        return;
+      }
+      vazio.classList.add('hidden');
+
+      // Escala pelo MAIOR TOTAL, não pelo maior segmento: as barras são
+      // empilhadas, então o que compete pela largura é a soma da linha.
+      var maiorTotal = linhas[0].total;
+
+      container.innerHTML = linhas.map(function (l) {
+        var segmentos = AREAS_TIPO_SERIES_.map(function (s) {
+          var v = l.valores[s.campo];
+          if (!v) return '';
+          var pct = (v / maiorTotal) * 100;
+          // Número dentro do segmento só quando cabe: abaixo de ~4% da largura
+          // ele encavala no vizinho e vira borrão. O valor fica no tooltip.
+          var cabe = pct >= 4;
+          return '<div class="h-5 flex items-center justify-center text-[9px] font-bold shrink-0" ' +
+            'style="width:' + pct + '%;background:' + s.cor + ';color:' + (s.campo === 'amarelo' ? '#4a3a00' : '#fff') + '" ' +
+            'title="' + escaparHtml(l.area) + ' — ' + s.rotulo + ': ' + v + '">' +
+            (cabe ? v : '') + '</div>';
+        }).join('');
+
+        return '<div class="flex items-center gap-2 py-0.5">' +
+          '<span class="w-40 shrink-0 text-[10.5px] text-slate-600 truncate" title="' + escaparHtml(l.area) + '">' +
+            escaparHtml(l.area) + '</span>' +
+          '<div class="flex-1 min-w-0 flex rounded-sm overflow-hidden bg-slate-50">' + segmentos + '</div>' +
+          '<span class="w-8 shrink-0 text-right text-[10.5px] font-bold text-brand-primary" ' +
+            'style="font-variant-numeric: tabular-nums">' + l.total + '</span>' +
+          '</div>';
+      }).join('');
+
+      if (rodape) {
+        var totaisSerie = AREAS_TIPO_SERIES_.map(function (s) {
+          var soma = linhas.reduce(function (a, l) { return a + l.valores[s.campo]; }, 0);
+          return s.rotulo + ' ' + soma;
+        });
+        var totalGeral = linhas.reduce(function (a, l) { return a + l.total; }, 0);
+        rodape.textContent = totaisSerie.join(' · ') + ' · total ' + totalGeral +
+          ' em ' + linhas.length + (linhas.length === 1 ? ' área' : ' áreas') + ' com ocorrência no ano.';
+      }
     }
 
     /**
@@ -5923,6 +6507,38 @@
     }
 
     // Anima o número de 0 (ou do valor anterior) até o valor final, em vez de trocar de golpe.
+    /**
+     * A hierarquia (aba de pessoas) está disponível? Se NÃO, escreve o aviso no
+     * container e devolve true, para quem chama NÃO desenhar o Pareto.
+     *
+     * Existe por um defeito medido em 26/08/2026: a aba 'Base pessoas' não
+     * existe na planilha, então TODAS as 420 ocorrências caíam em "Sem gerente
+     * mapeado" e o Pareto por Gerente desenhava UMA barra com o total — que se
+     * lê como um achado ("um gerente concentra tudo"), não como uma fonte
+     * faltando. Vale para os DOIS cards: o do ATS e o de Ocorrências.
+     *
+     * Falha silenciosa é pior que card vazio: o card vazio faz perguntar.
+     */
+    function hierarquiaIndisponivel_(idContainer, hierarquia) {
+      var h = hierarquia || {};
+      if (!h.erro && Number(h.total) > 0) return false;
+
+      var el = document.getElementById(idContainer);
+      if (!el) return true;
+
+      var motivo = h.erro
+        ? 'A aba de hierarquia não pôde ser lida (' + h.erro + ').'
+        : 'A aba de hierarquia está vazia.';
+      el.innerHTML =
+        '<div class="text-[11px] leading-relaxed rounded-lg px-3 py-2" ' +
+        'style="background:#fffbeb;color:#92400e;border:1px solid #fcd34d">' +
+        '<b>Sem hierarquia de gerentes.</b> ' + escaparHtml(motivo) +
+        ' Sem ela não dá para dizer de quem é cada ocorrência, então este Pareto ' +
+        'não é exibido — mostrar tudo num único "Sem gerente mapeado" pareceria um resultado.' +
+        '</div>';
+      return true;
+    }
+
     /** Separador de milhar pt-BR. Os dois níveis de baixo da pirâmide vêm da
      *  base TAG-SAF e chegam na casa dos 28 mil — sem separador não se lê. */
     function formatarNumeroSvg_(valor) {
@@ -6223,12 +6839,12 @@
     // da Cruz Verde (CRUZ_SEGURANCA_CORES no Code.js): com afastamento
     // VERMELHO, sem afastamento LARANJA, primeiros socorros AMARELO.
     //
-    // NÃO reusar FAI_RAMPA_/REC_RAMPA_ aqui, como era antes: elas terminam em
-    // #7c4a03 e #9a3412, que são MARRONS. Aquilo é proposital nos heatmaps
-    // área×mês, onde o extremo escuro é o que transmite intensidade — mas no
-    // boneco fazia a categoria inteira (bolinha do filtro, região pintada e
-    // ponto do feed) ler marrom em vez de laranja/amarelo, quebrando a
-    // convenção de cor que o resto do portal usa pra gravidade.
+    // NÃO ancorar estas rampas em #7c4a03 / #9a3412 (os extremos escuros que os
+    // antigos heatmaps área×mês usavam, removidos em 25/08/2026): são MARRONS.
+    // Num heatmap aquilo é proposital, porque o extremo escuro é o que transmite
+    // intensidade — mas no boneco fazia a categoria inteira (bolinha do filtro,
+    // região pintada e ponto do feed) ler marrom em vez de laranja/amarelo,
+    // quebrando a convenção de cor que o resto do portal usa pra gravidade.
     var CORPO_CATEGORIA_RAMPA_ = {
       // 'todas' usa o azul da marca, um matiz NEUTRO de propósito: pintar a
       // soma com a cor de uma das categorias sugeriria que o card está
@@ -6368,10 +6984,26 @@
       var select = document.getElementById('boneco-select-area');
       if (!select) return;
       var valorAtual = select.value || 'Todas';
+
+      // O VALUE fica com a grafia da base de Ocorrências (é o que o filtro do
+      // Boneco compara), mas o TEXTO exibido usa o rótulo da Cruz quando a área
+      // existe lá. As duas bases canonicalizam separadamente, então a mesma área
+      // vira "Logística Interna" numa e "LOGISTICA INTERNA" na outra — e os dois
+      // selects ficam na MESMA tela, um do lado do outro.
+      var selectCruz = document.getElementById('cruz-select-departamento');
+
       select.innerHTML = '<option value="Todas">Todas as áreas</option>' + (areas || []).map(function (area) {
-        return '<option value="' + area + '">' + area + '</option>';
+        var equivalente = acharOpcaoDeArea_(selectCruz, area);
+        var rotulo = (equivalente && equivalente.value !== 'Todas') ? equivalente.value : area;
+        return '<option value="' + escaparHtml(area) + '">' + escaparHtml(rotulo) + '</option>';
       }).join('');
+
       if (valorAtual === 'Todas' || (areas || []).indexOf(valorAtual) !== -1) select.value = valorAtual;
+    }
+
+    function onBonecoAreaAlterada() {
+      renderizarBonecoPartesDoCorpo();
+      sincronizarAreaEntreCards_('boneco-select-area');
     }
 
     function onBonecoAnoAlterado() {
@@ -6561,57 +7193,127 @@
       });
     }
 
+    // As três fatias azuis (Quase Acidente A, B e C) dividem o MESMO tipoEvento
+    // na base — 'Quase acidente'. Quem as separa é a classificação da coluna D,
+    // que cada ocorrência do feed carrega em classificacaoNM. Sem esse filtro as
+    // três fatias devolviam exatamente a mesma lista.
+    var PIRAMIDE_CLASSE_NM_ = {
+      'Quase Acidente A': 'A',
+      'Quase Acidente B': 'B',
+      'Quase Acidente C': 'C'
+    };
+
+    var PIRAMIDE_TIPO_TAG_ = {
+      'Condição Insegura': 'condicaoInsegura',
+      'Comportamento Inseguro': 'comportamentoInseguro'
+    };
+
+    // A Compilado classifica em 6 tipos de evento; Fatalidade e Debilitação são
+    // níveis da Pirâmide que a base nunca produziu. Clicar neles não é erro — a
+    // resposta certa é "nenhum registro", com o motivo escrito em vez do texto
+    // genérico de lista vazia.
+    var PIRAMIDE_SEM_BASE_ = ['Fatalidade', 'Debilitação'];
+
     function onPiramideClick(categoria) {
       if (!cruzDadosAno) return;
 
+      // Os dois selects nascem VAZIOS no markup — quem os preenche é a carga do
+      // painel da Cruz. Sem o fallback, um clique antes disso produzia
+      // periodo='' e o feed abria com "(undefined)" e zero registros.
       var areaSelect = document.getElementById('piramide-select-area');
       var periodoSelect = document.getElementById('piramide-select-periodo');
-      var area = areaSelect ? areaSelect.value : 'Todas';
-      var periodo = periodoSelect ? periodoSelect.value : 'todos';
+      var area = (areaSelect && areaSelect.value) || 'Todas';
+      var periodo = (periodoSelect && periodoSelect.value) || 'todos';
 
-      var registros = [];
-      var meses = periodo === 'todos' ? [1,2,3,4,5,6,7,8,9,10,11,12] : [Number(periodo)];
+      if (PIRAMIDE_SEM_BASE_.indexOf(categoria) !== -1) {
+        renderizarFeedPiramide(categoria, area, periodo, [], {
+          aviso: 'A base de ocorrências não registra eventos desta categoria.'
+        });
+        return;
+      }
 
-      meses.forEach(function(mes) {
-        if (categoria === 'Condição Insegura' || categoria === 'Comportamento Inseguro') {
-          var tipoTag = categoria === 'Condição Insegura' ? 'condicaoInsegura' : 'comportamentoInseguro';
-          var tagMes = (cruzDadosAno.totaisTagSaf[area] && cruzDadosAno.totaisTagSaf[area][mes]) || null;
-          
-          if (tagMes && tagMes.registros && tagMes.registros[tipoTag]) {
-             registros = registros.concat(tagMes.registros[tipoTag].map(function(r) {
-               return {
-                 dia: r.dia,
-                 tipoEvento: categoria,
-                 departamento: r.departamento,
-                 descricao: r.descricao
-               };
-             }));
-          }
-        } else {
-          var tipoCruz = categoria;
-          if (categoria.indexOf('Quase Acidente') > -1) tipoCruz = 'Quase acidente';
+      var tipoTag = PIRAMIDE_TIPO_TAG_[categoria];
+      if (tipoTag) {
+        // TAG SAF: as descrições NÃO vêm no pacote da Cruz — juntas estouravam o
+        // cache e inflavam o payload de toda carga da tela. Busca sob demanda,
+        // só a fatia pedida (ver getTagSafRegistros no Code.js).
+        var anoSelect = document.getElementById('cruz-select-ano');
+        var ano = anoSelect ? Number(anoSelect.value) : new Date().getFullYear();
 
-          var ocorMes = (cruzDadosAno.ocorrenciasPorDepartamentoMes[area] && cruzDadosAno.ocorrenciasPorDepartamentoMes[area][mes]) || [];
-          ocorMes.forEach(function(o) {
-            if (o.tipoEvento === tipoCruz) {
-              registros.push(o);
+        renderizarFeedPiramide(categoria, area, periodo, [], { carregando: true });
+
+        google.script.run
+          .withSuccessHandler(function (resposta) {
+            if (!resposta || !resposta.ok) {
+              renderizarFeedPiramide(categoria, area, periodo, [], {
+                aviso: (resposta && resposta.erro) || 'Não foi possível carregar os relatos.'
+              });
+              return;
             }
+            var lista = resposta.registros.map(function (r) {
+              return {
+                dia: r.dia,
+                mes: r.mes,
+                tipoEvento: categoria,
+                departamento: r.departamento,
+                descricao: r.descricao
+              };
+            });
+            renderizarFeedPiramide(categoria, area, periodo, lista, {
+              total: resposta.total,
+              truncado: resposta.truncado,
+              rodape: 'Amostra dos ' + resposta.maximoPorMes + ' relatos mais recentes de cada mês.'
+            });
+          })
+          .withFailureHandler(function (e) {
+            renderizarFeedPiramide(categoria, area, periodo, [], {
+              aviso: (e && e.message) ? e.message : 'Falha ao buscar os relatos.'
+            });
+          })
+          .getTagSafRegistros(ano, area, periodo, tipoTag);
+        return;
+      }
+
+      // Ocorrências da Cruz: já estão em memória, no pacote do ano.
+      var classeNM = PIRAMIDE_CLASSE_NM_[categoria];
+      var tipoCruz = classeNM ? 'Quase acidente' : categoria;
+      var meses = periodo === 'todos' ? [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12] : [Number(periodo)];
+      var registros = [];
+
+      meses.forEach(function (mes) {
+        var ocorMes = (cruzDadosAno.ocorrenciasPorDepartamentoMes[area] && cruzDadosAno.ocorrenciasPorDepartamentoMes[area][mes]) || [];
+        ocorMes.forEach(function (o) {
+          if (o.tipoEvento !== tipoCruz) return;
+          if (classeNM && o.classificacaoNM !== classeNM) return;
+          registros.push({
+            dia: o.dia,
+            mes: mes,
+            tipoEvento: o.tipoEvento,
+            departamento: o.departamento,
+            descricao: o.descricao
           });
-        }
+        });
       });
 
-      registros.sort(function(a, b) { return b.dia - a.dia; });
-      renderizarFeedPiramide(categoria, area, periodo, registros);
+      registros.sort(function (a, b) { return (b.mes - a.mes) || (b.dia - a.dia); });
+      renderizarFeedPiramide(categoria, area, periodo, registros, { total: registros.length });
     }
 
-    function renderizarFeedPiramide(categoria, area, periodo, registros) {
+    /**
+     * `opcoes`: { carregando, aviso, total, truncado, rodape }. A busca da TAG
+     * SAF é assíncrona, então esta função é chamada DUAS vezes por clique — uma
+     * com `carregando` e outra com o resultado.
+     */
+    function renderizarFeedPiramide(categoria, area, periodo, registros, opcoes) {
+      opcoes = opcoes || {};
+
       var feedLateral = document.getElementById('feed-lateral');
       if (feedLateral) feedLateral.classList.add('feed-in');
-      
+
       document.getElementById('feed-home-conteudo').classList.add('hidden');
       document.getElementById('feed-cruz-conteudo').classList.remove('hidden');
       document.getElementById('feed-cruz-conteudo').classList.add('flex');
-      
+
       document.getElementById('feed-lateral-titulo').textContent = 'Tracker Overview';
       document.getElementById('feed-lateral-subtitulo').classList.remove('hidden');
 
@@ -6620,47 +7322,330 @@
       var vazio = document.getElementById('cruz-feed-vazio');
       var botaoLimpar = document.getElementById('cruz-feed-limpar-filtro');
 
-      var CRUZ_MESES = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'];
       var nomeMes = periodo === 'todos' ? 'Ano inteiro' : CRUZ_MESES[Number(periodo) - 1];
-      
-      subtitulo.textContent = categoria + ' — ' + area + ' (' + nomeMes + ')';
+      var contagem = opcoes.carregando ? '' : ' · ' + (opcoes.total || 0);
+
+      subtitulo.textContent = categoria + ' — ' + area + ' (' + nomeMes + ')' + contagem;
       if (botaoLimpar) botaoLimpar.classList.add('hidden');
 
       lista.innerHTML = '';
-      
-      if (!registros.length) {
-        vazio.textContent = 'Nenhum comentário/descrição registrado para este período.';
+
+      if (opcoes.carregando) {
+        vazio.textContent = 'Carregando relatos…';
         vazio.classList.remove('hidden');
-      } else {
-        vazio.classList.add('hidden');
-        registros.forEach(function (oc) {
-          var card = document.createElement('div');
-          card.className = 'bg-white p-3 rounded-xl border border-slate-100 flex flex-col gap-1.5 shadow-sm';
-
-          var cabecalho = document.createElement('div');
-          cabecalho.className = 'flex items-center justify-between gap-2';
-
-          var areaEtiqueta = document.createElement('span');
-          areaEtiqueta.className = 'text-[10px] font-bold text-brand-primary uppercase tracking-wide truncate';
-          areaEtiqueta.textContent = oc.departamento;
-          areaEtiqueta.title = oc.departamento;
-
-          var diaSpan = document.createElement('span');
-          diaSpan.className = 'text-[10px] font-bold text-slate-400 shrink-0';
-          diaSpan.textContent = 'Dia ' + oc.dia;
-
-          cabecalho.appendChild(areaEtiqueta);
-          cabecalho.appendChild(diaSpan);
-
-          var desc = document.createElement('p');
-          desc.className = 'text-xs text-slate-600 leading-snug mt-1';
-          desc.textContent = oc.descricao || 'Sem descrição detalhada.';
-
-          card.appendChild(cabecalho);
-          card.appendChild(desc);
-          lista.appendChild(card);
-        });
+        return;
       }
+
+      if (!registros.length) {
+        vazio.textContent = opcoes.aviso || 'Nenhum comentário/descrição registrado para este período.';
+        vazio.classList.remove('hidden');
+        return;
+      }
+
+      vazio.classList.add('hidden');
+      registros.forEach(function (oc) {
+        var card = document.createElement('div');
+        card.className = 'bg-white p-3 rounded-xl border border-slate-100 flex flex-col gap-1.5 shadow-sm';
+
+        var cabecalho = document.createElement('div');
+        cabecalho.className = 'flex items-center justify-between gap-2';
+
+        var areaEtiqueta = document.createElement('span');
+        areaEtiqueta.className = 'text-[10px] font-bold text-brand-primary uppercase tracking-wide truncate';
+        areaEtiqueta.textContent = oc.departamento;
+        areaEtiqueta.title = oc.departamento;
+
+        // Com o período em "Ano inteiro" o dia sozinho é ambíguo — 3 registros
+        // "Dia 12" podem ser de meses diferentes.
+        var quando = 'Dia ' + oc.dia;
+        if (periodo === 'todos' && oc.mes) quando += '/' + oc.mes;
+
+        var diaSpan = document.createElement('span');
+        diaSpan.className = 'text-[10px] font-bold text-slate-400 shrink-0';
+        diaSpan.textContent = quando;
+
+        cabecalho.appendChild(areaEtiqueta);
+        cabecalho.appendChild(diaSpan);
+
+        var desc = document.createElement('p');
+        desc.className = 'text-xs text-slate-600 leading-snug mt-1';
+        desc.textContent = oc.descricao || 'Sem descrição detalhada.';
+
+        card.appendChild(cabecalho);
+        card.appendChild(desc);
+        lista.appendChild(card);
+      });
+
+      // Rodapé de honestidade: o feed da TAG SAF é uma AMOSTRA (a base tem ~290
+      // relatos por dia), e quem lê precisa saber que não está vendo tudo.
+      var notas = [];
+      if (opcoes.truncado) notas.push('Mostrando os ' + registros.length + ' mais recentes de ' + opcoes.total + '.');
+      if (opcoes.rodape) notas.push(opcoes.rodape);
+      if (notas.length) {
+        var nota = document.createElement('p');
+        nota.className = 'text-[10px] text-slate-400 leading-snug mt-1 px-1';
+        nota.textContent = notas.join(' ');
+        lista.appendChild(nota);
+      }
+    }
+
+    /* ====================================================================
+       PRUDÊNCIO — assistente do portal
+       ====================================================================
+       O painel é montado só quando aberto pela primeira vez, e a chamada ao
+       servidor só acontece quando alguém pergunta: nada disto entra no
+       bootstrap nem pesa no carregamento de quem não usa.
+
+       O texto das respostas é inserido com textContent, NUNCA innerHTML —
+       vem de um modelo de linguagem, que é entrada não confiável por
+       definição. Só o negrito **assim** é convertido, e à mão.
+       ==================================================================== */
+    var prudencioAberto_ = false;
+    var prudencioOcupado_ = false;
+    var prudencioHistorico_ = [];
+    var prudencioConviteJaMostrado_ = false;
+
+    /**
+     * Mostra o "Posso ajudar?" ao lado do mascote.
+     *
+     * Uma vez por sessão, e só se o chat ainda não tiver sido aberto: quem já
+     * conhece o Prudêncio não precisa ser convidado de novo, e insistir
+     * transforma um convite em incômodo.
+     */
+    function prudencioConvidar_() {
+      if (prudencioConviteJaMostrado_ || prudencioAberto_) return;
+      var convite = document.getElementById('prudencio-convite');
+      if (!convite) return;
+
+      prudencioConviteJaMostrado_ = true;
+      // SÓ tira o `hidden`. Quem anima entrada e saída é o CSS
+      // (`prud-balao-sobe`), em sincronia com o pulo do mascote.
+      //
+      // O JS NÃO pode escrever opacity nem transform aqui: keyframe ganha de
+      // estilo inline, então "esconder por opacidade" não esconderia nada, e
+      // um transform inline brigaria com o translateY da animação.
+      convite.classList.remove('hidden');
+    }
+
+    function prudencioEsconderConvite_() {
+      var convite = document.getElementById('prudencio-convite');
+      if (!convite || convite.classList.contains('hidden')) return;
+      // Imediato e sem esperar transição: `display:none` é o ÚNICO jeito de
+      // esconder um elemento cuja opacidade é escrita por keyframe infinito.
+      convite.classList.add('hidden');
+    }
+
+    // 4 segundos: tempo de a home terminar de montar os cards. Antes disso o
+    // balão competiria com o conteúdo que a pessoa abriu a página para ver.
+    setTimeout(prudencioConvidar_, 4000);
+
+    var PRUDENCIO_SUGESTOES_ = [
+      'Qual área teve mais ocorrências este ano?',
+      'Como está a taxa TRIR contra a meta?',
+      'Quantas ações do ATS estão vencidas?'
+    ];
+
+    function prudencioAlternar() {
+      var painel = document.getElementById('prudencio-painel');
+      if (!painel) return;
+
+      prudencioAberto_ = !prudencioAberto_;
+      painel.classList[prudencioAberto_ ? 'remove' : 'add']('hidden');
+
+      // Mascote quieto enquanto a conversa está aberta: um boneco pulando ao
+      // lado do texto que a pessoa está lendo disputa a atenção com a resposta.
+      // A regra mora no CSS (`body.prudencio-aberto #prudencio-mascote`); aqui
+      // só se liga o interruptor. `document.body &&` porque prudencioAlternar
+      // é recortado por teste, que roda com um DOM mínimo.
+      if (document.body) {
+        document.body.classList[prudencioAberto_ ? 'add' : 'remove']('prudencio-aberto');
+      }
+
+      // O convite e o ponto de "novo" cumpriram o papel no momento em que a
+      // pessoa clicou — some com os dois e não os traga de volta.
+      prudencioEsconderConvite_();
+      prudencioConviteJaMostrado_ = true;
+
+      var novo = document.getElementById('prudencio-novo');
+      if (novo) novo.classList.add('hidden');
+
+      if (!prudencioAberto_) return;
+
+      // O avatar do cabeçalho é um CLONE do mascote do botão — uma cópia do
+      // desenho no markup viraria duas artes divergindo com o tempo.
+      var avatar = document.getElementById('prudencio-avatar');
+      if (avatar && !avatar.childNodes.length) {
+        var mascote = document.getElementById('prudencio-mascote');
+        if (mascote) {
+          var copia = mascote.cloneNode(true);
+          copia.removeAttribute('id');
+          copia.setAttribute('class', 'w-7 h-7');
+          avatar.appendChild(copia);
+        }
+      }
+
+      if (!prudencioHistorico_.length) prudencioSaudar_();
+      var entrada = document.getElementById('prudencio-entrada');
+      if (entrada) entrada.focus();
+    }
+
+    function prudencioSaudar_() {
+      // A saudação vem do SERVIDOR: o nome sai do e-mail corporativo e a parte
+      // do dia sai do fuso do script. Relógio de máquina pessoal desregulado
+      // daria "boa noite" às três da tarde, logo na primeira frase.
+      var bolha = prudencioAdicionar_('assistente', '…');
+      google.script.run
+        .withSuccessHandler(function (s) {
+          if (bolha) prudencioEscreverTexto_(bolha, (s && s.texto) || 'Olá! O que você quer saber?');
+        })
+        .withFailureHandler(function () {
+          if (bolha) prudencioEscreverTexto_(bolha,
+            'Olá! Sou o Prudêncio. O que você quer saber sobre os indicadores?');
+        })
+        .prudencioSaudacaoInicial();
+
+      var caixa = document.getElementById('prudencio-sugestoes');
+      if (!caixa) return;
+      caixa.innerHTML = '';
+      PRUDENCIO_SUGESTOES_.forEach(function (texto) {
+        var b = document.createElement('button');
+        b.type = 'button';
+        b.className = 'text-[10.5px] leading-tight text-left px-2 py-1 rounded-lg border border-slate-200 ' +
+          'text-slate-600 bg-white hover:bg-slate-50 hover:border-brand-secondary transition-colors';
+        b.textContent = texto;
+        b.onclick = function () {
+          var entrada = document.getElementById('prudencio-entrada');
+          if (entrada) entrada.value = texto;
+          prudencioEnviar();
+        };
+        caixa.appendChild(b);
+      });
+    }
+
+    /**
+     * Uma bolha da conversa. `quem` é 'usuario' | 'assistente' | 'erro'.
+     * Devolve o elemento, para o estado "pensando" poder se substituir depois.
+     */
+    function prudencioAdicionar_(quem, texto) {
+      var conversa = document.getElementById('prudencio-conversa');
+      if (!conversa) return null;
+
+      var linha = document.createElement('div');
+      linha.className = 'flex ' + (quem === 'usuario' ? 'justify-end' : 'justify-start');
+
+      var bolha = document.createElement('div');
+      var estilo = {
+        usuario: 'bg-brand-primary text-white rounded-br-sm',
+        assistente: 'bg-white text-slate-700 border border-slate-200 rounded-bl-sm',
+        erro: 'bg-red-50 text-red-700 border border-red-200 rounded-bl-sm'
+      }[quem] || '';
+      bolha.className = 'max-w-[85%] rounded-2xl px-3 py-2 text-xs leading-relaxed whitespace-pre-wrap break-words ' + estilo;
+      prudencioEscreverTexto_(bolha, texto);
+
+      linha.appendChild(bolha);
+      conversa.appendChild(linha);
+      conversa.scrollTop = conversa.scrollHeight;
+      return bolha;
+    }
+
+    /**
+     * Escreve o texto tratando **negrito** — e SÓ isso. O resto vai como texto
+     * puro, via createTextNode: a resposta vem de um modelo de linguagem, e
+     * jogá-la em innerHTML seria aceitar markup arbitrário vindo de fora.
+     */
+    function prudencioEscreverTexto_(alvo, texto) {
+      alvo.innerHTML = '';
+      String(texto || '').split(/(\*\*[^*]+\*\*)/).forEach(function (parte) {
+        if (!parte) return;
+        if (parte.slice(0, 2) === '**' && parte.slice(-2) === '**') {
+          var forte = document.createElement('strong');
+          forte.textContent = parte.slice(2, -2);
+          alvo.appendChild(forte);
+        } else {
+          alvo.appendChild(document.createTextNode(parte));
+        }
+      });
+    }
+
+    function prudencioEnviar(evento) {
+      if (evento && evento.preventDefault) evento.preventDefault();
+      if (prudencioOcupado_) return;
+
+      var entrada = document.getElementById('prudencio-entrada');
+      var pergunta = entrada ? entrada.value.trim() : '';
+      if (!pergunta) return;
+
+      var sugestoes = document.getElementById('prudencio-sugestoes');
+      if (sugestoes) sugestoes.innerHTML = '';
+
+      prudencioAdicionar_('usuario', pergunta);
+      if (entrada) { entrada.value = ''; entrada.style.height = 'auto'; }
+      prudencioDefinirOcupado_(true);
+
+      // Sem streaming: o google.script.run devolve a resposta inteira de uma
+      // vez. Como a espera é de vários segundos, o "pensando" é obrigatório —
+      // sem ele a tela fica parada e parece travada.
+      var pensando = prudencioAdicionar_('assistente', 'Consultando os indicadores…');
+      if (pensando) pensando.classList.add('text-slate-400', 'italic');
+
+      google.script.run
+        .withSuccessHandler(function (resposta) {
+          prudencioDefinirOcupado_(false);
+          var r = resposta || {};
+          if (pensando) {
+            pensando.classList.remove('text-slate-400', 'italic');
+            if (r.erro) {
+              pensando.className = 'max-w-[85%] rounded-2xl px-3 py-2 text-xs leading-relaxed whitespace-pre-wrap break-words bg-red-50 text-red-700 border border-red-200 rounded-bl-sm';
+              prudencioEscreverTexto_(pensando, r.erro);
+            } else {
+              prudencioEscreverTexto_(pensando, r.texto || 'Não consegui responder isso.');
+              // `aviso` aparece quando a resposta veio do modo básico com a IA
+              // fora do ar — quem lê precisa saber que não foi a IA que
+              // respondeu, sem que isso vire uma tela de erro.
+              if (r.aviso) {
+                var nota = document.createElement('p');
+                nota.className = 'text-[10px] text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-2 py-1 mt-1.5';
+                nota.textContent = r.aviso;
+                pensando.appendChild(nota);
+              }
+              prudencioAnotarFontes_(pensando, r.fontes);
+            }
+          }
+          if (!r.erro) {
+            prudencioHistorico_.push({ papel: 'user', texto: pergunta });
+            prudencioHistorico_.push({ papel: 'assistant', texto: r.texto || '' });
+            // Teto de 12 turnos: o histórico vai inteiro no pedido, e conversa
+            // longa vira custo por token sem melhorar a resposta.
+            if (prudencioHistorico_.length > 12) prudencioHistorico_ = prudencioHistorico_.slice(-12);
+          }
+          var conversa = document.getElementById('prudencio-conversa');
+          if (conversa) conversa.scrollTop = conversa.scrollHeight;
+        })
+        .withFailureHandler(function (e) {
+          prudencioDefinirOcupado_(false);
+          if (pensando) {
+            pensando.className = 'max-w-[85%] rounded-2xl px-3 py-2 text-xs leading-relaxed whitespace-pre-wrap break-words bg-red-50 text-red-700 border border-red-200 rounded-bl-sm';
+            prudencioEscreverTexto_(pensando, 'Falha ao falar com o servidor: ' + ((e && e.message) || e));
+          }
+        })
+        .prudencioPerguntar(pergunta, prudencioHistorico_);
+    }
+
+    /** Rodapé discreto dizendo de quais cards vieram os números. */
+    function prudencioAnotarFontes_(bolha, fontes) {
+      if (!fontes || !fontes.length) return;
+      var p = document.createElement('p');
+      p.className = 'text-[10px] text-slate-400 mt-1.5 pt-1.5 border-t border-slate-100';
+      p.textContent = 'fonte: ' + fontes.join(' · ');
+      bolha.appendChild(p);
+    }
+
+    function prudencioDefinirOcupado_(ocupado) {
+      prudencioOcupado_ = ocupado;
+      var botao = document.getElementById('prudencio-enviar');
+      var entrada = document.getElementById('prudencio-entrada');
+      if (botao) botao.disabled = ocupado;
+      if (entrada) entrada.disabled = ocupado;
     }
 
   </script>
