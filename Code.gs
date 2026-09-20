@@ -9469,7 +9469,7 @@ function obterIndicesApontamentosNovo_(aba) {
 
 /**
  * DIAGNÓSTICO — roda no editor ANTES de escrever a agregação "por tipo de
- * relato" de getApontamentosNovo_. Não existe coluna óbvia "TIPO" na BASE
+ * relato" de getApontamentosNovo. Não existe coluna óbvia "TIPO" na BASE
  * DE ENVIO batendo com os 5 tipos reais achados em "Respostas ao
  * formulário" (ATOS INSEGUROS.../SEGURANÇA - VER E AGIR/TAG - SAF -
  * Safety/ATOS SEGUROS/TAG - ENV - Environment — ver spec, seção 3.3).
@@ -9589,8 +9589,12 @@ var APONTAMENTOS_NOVO_ESTAGIOS_ = [
  * `porTipo` fica vazio de propósito até o diagnóstico de
  * debugApontamentosNovo_ revelar qual coluna carrega o tipo de relato (ver
  * spec, seção 3.3) — não adivinhar aqui.
+ *
+ * Sem sufixo "_": esta é a função pública chamada via google.script.run
+ * (padrão getFarolSaf/getAtsAbertos/getRiscosAltos). Funções com "_" no
+ * fim não são expostas ao google.script.run neste projeto.
  */
-function getApontamentosNovo_(forcar) {
+function getApontamentosNovo(forcar) {
   var vazio = {
     erro: null, totalGeral: 0,
     kpis: { total: 0, abertas: 0, lancadas: 0, fechamentoSolicitado: 0, fechadas: 0 },
@@ -9614,7 +9618,7 @@ function getApontamentosNovo_(forcar) {
     if (ultimaLinha < 2) return vazio;
 
     var fuso = planilha.getSpreadsheetTimeZone();
-    var colMax = colunasNecessarias_(idx, 'getApontamentosNovo_');
+    var colMax = colunasNecessarias_(idx, 'getApontamentosNovo');
     var dados = aba.getRange(2, 1, ultimaLinha - 1, colMax).getValues();
 
     var porEstagio = { aberta: 0, lancada: 0, fechamentoSolicitado: 0, fechada: 0 };

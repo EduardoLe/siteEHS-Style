@@ -1280,7 +1280,7 @@
 
               <!-- APONTAMENTOS — reconstruída do zero em 2026-09-20 (pauta de pendências
                    do site). Fonte: planilha nova, aba "BASE DE ENVIO" — já consolidada por
-                   um processo fora do Code.gs; getApontamentosNovo_ só lê. Ver spec em
+                   um processo fora do Code.gs; getApontamentosNovo só lê. Ver spec em
                    docs/superpowers/specs/2026-09-20-apontamentos-rebuild-design.md.
 
                    A antiga TAG SAF (Visão Geral + heatmap TAG Safety) saiu daqui — segue
@@ -1332,7 +1332,7 @@
                      confirmada ainda (5 tipos reais existem em "Respostas ao
                      formulário": Ato Inseguro/Condição Insegura×2/Ato Seguro/TAG-ENV
                      — ver spec seção 3.3). Card nasce em estado "fonte pendente" até
-                     debugApontamentosNovo_ resolver isso; getApontamentosNovo_ já
+                     debugApontamentosNovo_ resolver isso; getApontamentosNovo já
                      devolve porTipo:[] de propósito. -->
                 <div data-aba="apontamentos" class="order-6 xl:col-span-6 painel-bloco flex flex-col min-h-[16rem]">
                   <h3 class="text-sm font-bold text-brand-primary uppercase tracking-wide">Por tipo de relato</h3>
@@ -3349,7 +3349,7 @@
                   });
                 }, 400);
               },
-              getApontamentosNovo_: function () {
+              getApontamentosNovo: function () {
                 var ctx = this;
                 setTimeout(function () {
                   var areas = ['LINHA 5 - REDENTOR 20', 'UTILIDADES', 'FERRAMENTARIA', 'LINHA 8 - COCÇÃO', 'ESMALTAÇÃO', 'LOGÍSTICA INTERNA'];
@@ -8416,7 +8416,7 @@
     }
 
     // ---------------------------------------------------------------------
-    // APONTAMENTOS (reconstrução, 2026-09-20) — fonte: getApontamentosNovo_,
+    // APONTAMENTOS (reconstrução, 2026-09-20) — fonte: getApontamentosNovo,
     // que lê só a aba "BASE DE ENVIO" da planilha nova. Ver spec em
     // docs/superpowers/specs/2026-09-20-apontamentos-rebuild-design.md.
     // ---------------------------------------------------------------------
@@ -8446,7 +8446,7 @@
           apontNovoCarregadoUmaVez_ = false;
           mostrarErroApontNovo_(String(e && e.message ? e.message : e));
         })
-        .getApontamentosNovo_(false);
+        .getApontamentosNovo(false);
     }
 
     /** Chamada pelo mostrarAbaMetrics toda vez que uma aba fica ativa — o
