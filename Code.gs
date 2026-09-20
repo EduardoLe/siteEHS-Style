@@ -4,11 +4,151 @@
  * projeto Apps Script em 2026-07-25, não faz parte deste runtime)
  */
 
+/* ===================================================================
+   FAVICON — o Prudêncio no lugar do ícone padrão do Apps Script.
+
+   MEDIDO EM 26/08/2026: `setFaviconUrl` NÃO ACEITA `data:` URI. Foi tentado e
+   o ícone não mudou (o try/catch engoliu em silêncio, como projetado). O
+   `setFaviconUrl` quer uma URL de VERDADE, http(s) — é assim que funciona no
+   outro portal do usuário, que aponta para um .ico do site da Whirlpool.
+   **Não reintroduzir data: URI aqui.**
+
+   A arte é HOSPEDADA FORA (CloudFront, decisão do usuário em 26/08) e a URL
+   fica em PropertiesService, gravada por `definirFaviconUrl()`. O doGet só lê a
+   propriedade — trocar o ícone não exige deploy novo, só rodar a função.
+   O base64 abaixo é a MESMA arte, usada pelo <link> do Index.html (dev-server)
+   e guardada aqui como fonte, para gerar o arquivo de novo se ele se perder.
+
+   POR QUE PNG E NÃO SVG: `setFaviconUrl` emite um <link> sem `type`, e sem ele
+   o navegador não trata SVG como ícone de forma confiável. PNG 64x64 (611
+   bytes) resolve em todo lugar.
+
+   A ARTE É A MESMA do <link rel="icon"> do Index.html — mesma string base64,
+   e há teste exigindo que as duas cópias sejam idênticas. As duas precisam
+   existir porque cobrem coisas diferentes: o <link> vale no dev-server (página
+   de topo) e ISTO vale no /exec, onde o nosso HTML roda dentro de um IFRAME e
+   a aba do navegador pertence à página de FORA, do Google.
+
+   NÃO é o mascote do botão: a 16px os olhos dele (r=7.6 num viewBox de 120)
+   dariam ~1px. Esta versão tem cruz com menos margem, olhos maiores e sem boca.
+   =================================================================== */
+var PRUDENCIO_FAVICON_PROP_ = 'PRUDENCIO_FAVICON_URL';   // nome do arquivo: prudencio-favicon.png
+
+// Hospedado pelo usuário em 26/08/2026. CONFERIDO: HTTP 200, content-type
+// `image/png`, 611 bytes, MD5 igual ao arquivo original, e buscado SEM
+// credencial — que é o que importa, porque quem busca o ícone é o navegador de
+// cada pessoa do time, não o Apps Script.
+// É o PADRÃO: com ele o ícone funciona sem ninguém rodar nada. A propriedade
+// gravada por definirFaviconUrl() continua tendo precedência, para trocar o
+// ícone sem deploy novo.
+var PRUDENCIO_FAVICON_URL_PADRAO_ =
+  'https://2b2e703448.imgdist.com/pub/bfra/g6lteeqy/303/5o7/42f/prudencio-favicon.png';
+var PRUDENCIO_FAVICON_PNG_B64_ = 'iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAYAAACqaXHeAAACKklEQVR42u3bP0tCURgGcL+BYxDlB5DCsYgGl/6gtARFW0I1tAi1FC5JEA5BBtEkbdVQQQQOBYZDlBC0VNKmhBG0VEbQeOKRlNvxer10j3qk54UDwuWFe36+5z33XNHlYjgPd8Dndwd80SaPkE4AuCHR5JEmAAE0BeiY84vO8LDy0TYAuFlPZEz5IAABCEAAAhCAAAQgAAEUAyg4z6dbAJBX9j5B9WmuSQDqTpMEIIDa83z3UrAhAA17n9CILr54tCkyuTtRjsLri4if74ue1am6ednnXCUPn+3kOdpFVAMc3qRErSh+fYrRrXBVDiZonLgcuOYUoSkAO5cnol4AQZ6MsVqsELQGGFifEXYDUOW82d0123lYItoCYK3KsXd8IHqH+oXb2yWC0xPi/aNY6QlWSya2vSE8fd5S3nxkoZKHStEWQC7ji+ur0gSMY3B8pHK9Vh7Q5DwgyHnaAcjfJG5angjG7cO9JQAqxSxPrhztAKLJhC2Ax6fCr4YmN04rgLNsRl8AdHZ0eKslgMnJzUxunsnUaVXecmyldG0yEdF7G8TE5D6ASWNgEmhmZtuZXAVAKOehISKwxNriQQgIxkowBkq41gON2S5itm1qD1Aua/QENDgMTMBO+SIPEMY8sydH7QF0HAQgAAEIQAACEIAAfC1OAAJUAYR+fuD868i3AODN4T3H+fM4AQhAAAIQgAAEIAABCEAA/m2OAARwBOD0fUJrz/P/Ob4BDmFTcvL1s24AAAAASUVORK5CYII=';
+
+/**
+ * URL do favicon: a gravada em PropertiesService tem precedência; sem ela, a
+ * hospedada de fábrica. A ordem é essa para dar para trocar o ícone sem deploy.
+ *
+ * NUNCA lança: o doGet inteiro depende disto e um enfeite de aba não pode
+ * derrubar o portal do time.
+ */
+function faviconPrudencioUrl_() {
+  try {
+    var gravada = PropertiesService.getScriptProperties().getProperty(PRUDENCIO_FAVICON_PROP_);
+    if (gravada) return gravada;
+  } catch (e) {
+    // PropertiesService indisponível não pode custar o ícone: cai no padrão.
+  }
+  return PRUDENCIO_FAVICON_URL_PADRAO_ || '';
+}
+
+/**
+ * Grava a URL do ícone. RODAR UMA VEZ NO EDITOR, com o link do arquivo já
+ * hospedado — o doGet passa a usá-lo na carga seguinte, SEM deploy novo.
+ *
+ * POR QUE MANUAL, e não um instalador que sobe o PNG sozinho: publicar no Drive
+ * exigiria `DriveApp`, e o `appsscript.json` deste projeto NÃO declara
+ * `oauthScopes` — o Apps Script os deduz do código. Acrescentar o escopo do
+ * Drive dispararia reautorização do projeto inteiro, e com
+ * `executeAs: USER_DEPLOYING` isso pode travar o /exec para o time até o dono
+ * reautorizar. Trocar um ícone de aba não justifica esse risco.
+ *
+ * Como usar:
+ *   1. suba `prudencio-favicon.png` no Drive (ou em qualquer lugar público);
+ *   2. libere o acesso por link;
+ *   3. rode esta função com a URL, ou escreva o link em FAVICON_URL_MANUAL_
+ *      abaixo e rode sem argumento — o editor executa SEM argumentos.
+ *
+ * Para Drive, a forma que serve os BYTES da imagem é
+ * `https://lh3.googleusercontent.com/d/ID_DO_ARQUIVO`. O `/uc?export=view`
+ * responde com redirecionamento, e nem todo navegador o segue para favicon.
+ */
+var FAVICON_URL_MANUAL_ = '';   // <- cole aqui o link e rode sem argumento
+
+function definirFaviconUrl(url) {
+  var alvo = String(url || FAVICON_URL_MANUAL_ || '').trim();
+
+  if (!alvo) {
+    return debugLogar_([
+      'FAVICON — nenhuma URL informada.',
+      '',
+      '  Escreva o link em FAVICON_URL_MANUAL_ (topo do Code.js) e rode de novo,',
+      '  ou chame definirFaviconUrl("https://...") de outra função.',
+      '',
+      '  Lembrete: o editor do Apps Script executa a função SEM ARGUMENTOS.',
+      '  URL gravada hoje: ' + (faviconPrudencioUrl_() || '(nenhuma)')
+    ].join('\n'));
+  }
+
+  // data: foi MEDIDO em 26/08/2026 e o setFaviconUrl ignora — recusar aqui é
+  // melhor que gravar algo que falha calado depois.
+  if (alvo.indexOf('http') !== 0) {
+    return debugLogar_('FAVICON — RECUSADO: "' + alvo.slice(0, 40) + '..."\n' +
+      '  O setFaviconUrl só aceita http(s). data: URI não funciona (testado).');
+  }
+
+  PropertiesService.getScriptProperties().setProperty(PRUDENCIO_FAVICON_PROP_, alvo);
+  return debugLogar_([
+    'FAVICON GRAVADO: ' + alvo,
+    '',
+    '  Recarregue o /exec com Ctrl+Shift+R.',
+    '  NÃO precisa de deploy novo — o doGet lê a propriedade a cada carga.',
+    '  Se o ícone não mudar, a URL provavelmente exige login: abra-a numa aba',
+    '  anônima; se pedir autenticação, o navegador de quem abre o portal também',
+    '  não vai conseguir buscá-la.'
+  ].join('\n'));
+}
+
+/** Apaga a URL gravada e volta ao ícone padrão. */
+function limparFaviconUrl() {
+  PropertiesService.getScriptProperties().deleteProperty(PRUDENCIO_FAVICON_PROP_);
+  return debugLogar_('FAVICON removido — o portal volta ao ícone padrão do Apps Script.');
+}
+
+/** Mostra o que está gravado hoje, sem mexer em nada. */
+function debugFaviconPrudencio() {
+  var url = faviconPrudencioUrl_();
+  return debugLogar_('FAVICON\n  URL gravada: ' + (url || '(nenhuma — rodar definirFaviconUrl)') +
+    '\n  o doGet ' + (url ? 'VAI' : 'NÃO vai') + ' chamar setFaviconUrl nesta carga.');
+}
+
 function doGet() {
-  return HtmlService.createHtmlOutputFromFile('Index')
+  var saida = HtmlService.createHtmlOutputFromFile('Index')
     .setTitle('EHS Tracker')
     .addMetaTag('viewport', 'width=device-width, initial-scale=1')
     .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
+
+  // Ícone NUNCA pode derrubar o portal: sem URL instalada, ou com URL que o
+  // Apps Script recuse, a página abre com o ícone padrão em vez de dar erro
+  // para o time inteiro por causa de um enfeite de aba.
+  try {
+    var favicon = faviconPrudencioUrl_();
+    if (favicon) saida.setFaviconUrl(favicon);
+  } catch (e) {
+    // silêncio proposital.
+  }
+
+  return saida;
 }
 
 /**
@@ -42,14 +182,46 @@ function obterDadosIniciais() {
 /**
  * ===================================================
  * CRUZ DE SEGURANÇA
- * Fonte: planilha "Cruz Verde_RC 2026", aba "Compilado {ano}"
- * Colunas usadas: E = Tipo de evento, F = Data, I = Departamento (eixo único
- * de agrupamento — filtro de Área da Cruz, grid, tabela de totais, feed,
- * Pareto E o filtro próprio da Pirâmide usam todos a mesma coluna I, com
- * grafias variantes unificadas — ver obterRotuloCanonicoArea_)
+ *
+ * TROCA DE FONTE EM 25/08/2026 (pedido do usuário). Antes: planilha
+ * "Cruz Verde_RC 2026" (13izWV3j…), UMA ABA POR ANO ("Compilado 2026"), com o
+ * tipo de evento em E, a data em F, a área em I e a descrição em M.
+ * Agora: a planilha abaixo, com UMA ABA SÓ ("Cruz verde") cobrindo todos os
+ * anos — o que muda a arquitetura, não só os índices: `getAnosDisponiveis`
+ * deixou de listar nomes de aba e passou a derivar das DATAS, e a leitura
+ * virou um pacote único (obterCruzVerdeLinhas_) em vez de uma leitura por ano.
+ *
+ * Colunas (A..K): A Status Gensuite · B N° Gensuite · C NM (A/B/C) ·
+ * D Tipo do evento · E Data · F Turno · G Horário · H Área Macro ·
+ * I Área micro · J Máquina · K Descrição.
+ *
+ * ÁREA = "Área - Macro" (H). É a que corresponde ao que o portal sempre
+ * agrupou ("Fabricação Lavanderia", "Montagem Cocção", "Logística"); a coluna I
+ * desta planilha é a área MICRO ("Injetoras", "R30", "Linha 1"), granular
+ * demais para o filtro da Cruz — e não confundir com a antiga coluna I, que era
+ * o departamento macro. Se um dia quiserem detalhar, o dado está em
+ * CRUZ_VERDE_CABECALHOS_.areaMicro, já mapeado.
+ *
+ * Os tipos de evento ("Recordable LTA/NLTA", "First Aid", "Near Miss", "Fire")
+ * já eram os termos Gensuite que CRUZ_SEGURANCA_REGRAS_TEXTO reconhece — a
+ * classificação não precisou de uma linha sequer.
  * ===================================================
  */
-var BASE_HHT_SPREADSHEET_ID = '13izWV3jc2LG89AlYj50_5lMqiUHOhp9b5p4sUfp3a5Y';
+var CRUZ_VERDE_SPREADSHEET_ID_ = '1kYzkDMlG4lVdeEUiQz15iipardyLuRO6o0qegBKyPsk';
+var CRUZ_VERDE_ABA_ = 'Cruz verde';
+var CRUZ_VERDE_CACHE_CHAVE_ = 'cruzVerdeLinhas_v1';
+
+// Casadas por NOME de cabeçalho, com queda para a posição indicada pelo usuário
+// — o projeto já pagou o preço de índice fixo quebrando em silêncio quando
+// alguém insere uma coluna. `posicao` é 0-based.
+var CRUZ_VERDE_CABECALHOS_ = {
+  classificacaoNM: { termos: ['nm'],                      posicao: 2 },  // C
+  tipoEvento:      { termos: ['tipo do evento', 'tipo'],  posicao: 3 },  // D
+  data:            { termos: ['data'],                    posicao: 4 },  // E
+  area:            { termos: ['area macro', 'macro'],     posicao: 7 },  // H
+  areaMicro:       { termos: ['area micro'],              posicao: 8 },  // I
+  descricao:       { termos: ['descricao'],               posicao: 10 }  // K
+};
 
 var CRUZ_SEGURANCA_SEVERIDADE = [
   'Acidente com afastamento',
@@ -88,7 +260,7 @@ var CRUZ_SEGURANCA_REGRAS_TEXTO = [
 
 var DOJO_SPREADSHEET_ID_ = '1K7tNDA6Ml75CetWADXOdrn6Qp2qfPqxPTHsLSB3rmIo';
 var DOJO_ABA_ = 'Trat';
-var DOJO_TOTAL_COLABORADORES_ = 3634;
+var DOJO_TOTAL_COLABORADORES_ = 3611;
 var DOJO_CACHE_CHAVE_ = 'dojoResumo_v1';
 
 function normalizarTexto_(texto) {
@@ -111,17 +283,10 @@ function classificarTipoEvento_(valorBruto) {
   return null; // valor não reconhecido — a linha é ignorada
 }
 
-/**
- * A "Descrição das ocorrências" fica na coluna M (índice 12) da aba
- * "Compilado {ano}".
- */
-function extrairDescricao_(linha) {
-  var valor = String(linha[12] || '').trim();
-  if (valor && valor !== '-' && valor !== '----') {
-    return valor;
-  }
-  return '';
-}
+// extrairDescricao_ foi removida em 25/08/2026 com a troca da base da Cruz: ela
+// cravava a coluna M da antiga "Compilado {ano}". Na aba "Cruz verde" a
+// descrição está em K, resolvida por CRUZ_VERDE_CABECALHOS_.descricao, e a
+// limpeza dos marcadores "-" / "----" ficou dentro de obterCruzVerdeLinhas_.
 
 /**
  * Normaliza um texto (Departamento ou Área) pra uma CHAVE estável: sem
@@ -242,8 +407,35 @@ var TAG_SAF_SPREADSHEET_ID = '1a8cWEh_opmrR_7JzT2brkTIkI7HHwxLDxdPpU627hjQ';
 // v2 em 2026-07-28: passou de chave única (teto silencioso de ~95KB) pra cache
 // FATIADO via cacheGravarGrande_/cacheLerGrande_ — a chave antiga guardava o
 // JSON inteiro num put simples e ficaria ilegível pro leitor fatiado.
-var TAG_SAF_CACHE_CHAVE_ = 'tagSafTotaisPorAno_v2';
+// v3 em 2026-08-25: o pacote voltou a ser SÓ contagem. As descrições dos
+// relatos, que tinham entrado aqui dentro, foram pra cache próprio (ver
+// TAG_SAF_REG_CACHE_PREFIXO_) — juntas estouravam o teto do cache fatiado.
+var TAG_SAF_CACHE_CHAVE_ = 'tagSafTotaisPorAno_v3';
 var TAG_SAF_CACHE_SEGUNDOS_ = 5400; // 1.5h — base de ~65 mil linhas
+
+/* ---------------------------------------------------------------
+ * REGISTROS (descrições) DA TAG SAF — cache SEPARADO, uma chave por ANO+ÁREA.
+ *
+ * Por que não junto do pacote de contagens: cacheGravarGrande_ tem teto de
+ * CACHE_MAX_PEDACOS_ x CACHE_PEDACO_CHARS_ = 1,8 milhão de caracteres, e passar
+ * disso faz ele devolver `false` EM SILÊNCIO — o cache simplesmente para de
+ * existir e toda requisição volta a ler as ~70 mil linhas da planilha. Só a
+ * chave 'Todas' de um ano, com 30 descrições por mês e por tipo, já passa de
+ * 200 mil caracteres; com as dezenas de áreas e mais de um ano, estoura.
+ *
+ * Uma chave por ano+área mantém cada pedaço pequeno (~5 fatias), escala
+ * linearmente com o número de áreas e é lida SOB DEMANDA — só quando alguém
+ * clica numa fatia da Pirâmide (getTagSafRegistros). Assim o pacote da Cruz,
+ * que vai inteiro pro navegador a cada carregamento, continua leve.
+ * --------------------------------------------------------------- */
+var TAG_SAF_REG_CACHE_PREFIXO_ = 'tagSafRegistros_v1_';
+// Sentinela por ano: lista as áreas que TÊM registros. Serve pra distinguir
+// "cache expirou" de "esta área não tem relato nenhum" — sem ela, uma área
+// vazia mandaria reler as 70 mil linhas a cada clique.
+var TAG_SAF_REG_META_SUFIXO_ = '__meta';
+var TAG_SAF_REG_MAX_POR_BUCKET_ = 30;   // por área x mês x tipo
+var TAG_SAF_REG_MAX_DESCRICAO_ = 200;   // caracteres por descrição
+var TAG_SAF_REG_MAX_RETORNO_ = 300;     // teto do que volta pro navegador de uma vez
 
 /* ===================================================
  * TAG SAFETY (formulário TAG DIGITAL) — matriz de risco
@@ -273,31 +465,86 @@ function localizarColuna_(cabecalhos, chaveNormalizada) {
   throw new Error('Coluna "' + chaveNormalizada + '" não encontrada na aba "BASE TAG - SAF".');
 }
 
-function incrementarTagSaf_(estrutura, ano, chave, mes, dia, tipo, descricao) {
+/**
+ * Fábrica do extrator de ano/mês/dia de uma célula de data.
+ *
+ * POR QUE EXISTE — medido na planilha viva em 25/08/2026: `obterTotaisTagSaf_`
+ * levava **249 segundos**, e o tempo não estava na leitura das células, estava
+ * aqui. `Utilities.formatDate` é uma chamada ao SERVIÇO Utilities (~1,5 ms cada),
+ * e o loop fazia 2 a 3 delas por linha em ~58 mil linhas classificadas: perto de
+ * 160 mil chamadas de serviço. Os getters nativos de Date são locais e custam
+ * nanossegundos.
+ *
+ * O CUIDADO QUE O formatDate RESOLVIA CONTINUA VALENDO: ele lê a data no fuso da
+ * PLANILHA, enquanto getFullYear/getMonth/getDate leem no fuso do PROJETO. Se os
+ * dois divergirem, uma linha perto da meia-noite cai no dia anterior — é o mesmo
+ * risco anotado em calcularCruzAnoCompleto_. Por isso o caminho rápido só entra
+ * quando os fusos são IGUAIS, que é o caso hoje (ambos America/Sao_Paulo).
+ *
+ * Fuso divergente continua correto pelo formatDate, mas com UMA chamada em vez
+ * de três: o formato 'yyyy-M-d' traz os três campos de uma vez.
+ *
+ * @param {string} fusoPlanilha
+ * @return {function(Date): {ano: number, mes: number, dia: number}}
+ */
+function fabricarLeitorDeData_(fusoPlanilha) {
+  if (fusoPlanilha === Session.getScriptTimeZone()) {
+    return function (data) {
+      return { ano: data.getFullYear(), mes: data.getMonth() + 1, dia: data.getDate() };
+    };
+  }
+
+  return function (data) {
+    var partes = Utilities.formatDate(data, fusoPlanilha, 'yyyy-M-d').split('-');
+    return { ano: Number(partes[0]), mes: Number(partes[1]), dia: Number(partes[2]) };
+  };
+}
+
+function incrementarTagSaf_(estrutura, ano, chave, mes, tipo) {
   if (!estrutura[ano]) estrutura[ano] = {};
   if (!estrutura[ano][chave]) estrutura[ano][chave] = {};
-  if (!estrutura[ano][chave][mes]) estrutura[ano][chave][mes] = { 
-      condicaoInsegura: 0, comportamentoInseguro: 0,
-      registros: { condicaoInsegura: [], comportamentoInseguro: [] } 
-  };
+  if (!estrutura[ano][chave][mes]) estrutura[ano][chave][mes] = { condicaoInsegura: 0, comportamentoInseguro: 0 };
 
   estrutura[ano][chave][mes][tipo]++;
+}
 
-  if (descricao && estrutura[ano][chave][mes].registros[tipo].length < 60) {
-    estrutura[ano][chave][mes].registros[tipo].push({
-      dia: dia,
-      tipoEvento: tipo === 'condicaoInsegura' ? 'Condição Insegura' : 'Comportamento Inseguro',
-      departamento: chave,
-      descricao: descricao.slice(0, 250)
-    });
+/**
+ * Guarda a descrição de um relato no balde ano -> área -> mês -> tipo, mantendo
+ * no máximo TAG_SAF_REG_MAX_POR_BUCKET_ por balde.
+ *
+ * MANTÉM OS MAIS RECENTES DO MÊS, não os primeiros que aparecerem. A planilha
+ * está em ordem cronológica: cortar pelos primeiros N daria sempre os dias 1 a 3
+ * do mês e nunca o que acabou de acontecer, que é justamente o que alguém quer
+ * ver ao clicar na Pirâmide. Quando o balde enche, o de MENOR dia é substituído.
+ */
+function tagSafGuardarRegistro_(registros, ano, chaveNorm, mes, tipo, registro) {
+  if (!registros[ano]) registros[ano] = {};
+  if (!registros[ano][chaveNorm]) registros[ano][chaveNorm] = {};
+  if (!registros[ano][chaveNorm][mes]) registros[ano][chaveNorm][mes] = { condicaoInsegura: [], comportamentoInseguro: [] };
+
+  var lista = registros[ano][chaveNorm][mes][tipo];
+  if (lista.length < TAG_SAF_REG_MAX_POR_BUCKET_) {
+    lista.push(registro);
+    return;
   }
+
+  var indiceMaisAntigo = 0;
+  for (var i = 1; i < lista.length; i++) {
+    if (lista[i].dia < lista[indiceMaisAntigo].dia) indiceMaisAntigo = i;
+  }
+  if (registro.dia >= lista[indiceMaisAntigo].dia) lista[indiceMaisAntigo] = registro;
+}
+
+/** Nome da chave de cache dos registros de um ano + área (já normalizada). */
+function tagSafRegChave_(ano, chaveNorm) {
+  return TAG_SAF_REG_CACHE_PREFIXO_ + ano + '_' + String(chaveNorm).replace(/\s+/g, '_');
 }
 
 /**
  * CONDIÇÃO INSEGURA / COMPORTAMENTO INSEGURO — base separada (planilha própria
  * "BASE TAG - SAF", aba de mesmo nome, ~65 mil linhas). Fecha os 2 níveis da
- * Pirâmide de Segurança que nunca existiram na Compilado (confirmado antes via
- * debugAreasCompiladoAno).
+ * Pirâmide de Segurança que nunca existiram na base da Cruz (confirmado por
+ * diagnóstico à época; hoje o equivalente é debugCruzVerde).
  *
  * A coluna "RELATO" já traz o texto direto: "CONDIÇÃO INSEGURA", "ATO INSEGURO
  * - SEGURANÇA..." (= comportamento inseguro) ou "ATO SEGURO" (observação
@@ -309,12 +556,14 @@ function incrementarTagSaf_(estrutura, ano, chave, mes, dia, tipo, descricao) {
  * reconciliarTagSafComAreas_.
  *
  * Colunas são localizadas pelo NOME do cabeçalho (não por letra fixa) pra não
- * depender da ordem exata das ~37 colunas da aba. Só lê as 3 colunas
- * necessárias — não a linha inteira, que tem colunas de texto livre longas
- * (relato detalhado, ação tomada) que não interessam aqui.
+ * depender da ordem exata das ~37 colunas da aba. Só lê as 4 colunas
+ * necessárias — não a linha inteira, que tem outras colunas de texto livre
+ * longas (relato detalhado, ação tomada) que não interessam aqui.
  *
- * Resultado (só contagens, não as linhas brutas) é cacheado via CacheService —
- * a planilha é grande e não muda a cada troca de filtro/usuário.
+ * O RETORNO É SÓ CONTAGEM. As descrições lidas na mesma passada vão para um
+ * cache SEPARADO, por ano+área (ver TAG_SAF_REG_CACHE_PREFIXO_ e
+ * getTagSafRegistros); juntá-las aqui estourava o cache fatiado em silêncio e
+ * inflava o pacote da Cruz, que trafega inteiro até o navegador.
  * Formato: { [ano]: { [departamentoBruto|'Todas']: { [mes]: { condicaoInsegura, comportamentoInseguro } } } }
  */
 function obterTotaisTagSaf_(forcar) {
@@ -329,16 +578,18 @@ function obterTotaisTagSaf_(forcar) {
 
   var ultimaLinha = aba.getLastRow();
   var resultado = {};
+  var registros = {};
 
   if (ultimaLinha >= 2) {
     var cabecalhos = aba.getRange(1, 1, 1, aba.getLastColumn()).getValues()[0];
     var colData = localizarColuna_(cabecalhos, 'data');
     var colRelato = localizarColuna_(cabecalhos, 'relato');
     var colDepartamento = localizarColuna_(cabecalhos, 'departamento gensuite');
-    
-    // NOVO: Busca a coluna de descrição (comentários)
+
+    // Descrição do relato ("Descreva..."). Casada por TERMO parcial porque o
+    // cabeçalho é uma pergunta inteira de formulário; cai na posição J se mudar.
     var colDescricao = localizarColunaPorTermo_(cabecalhos, 'descreva');
-    if (colDescricao === -1) colDescricao = 9; // Fallback para a posição J
+    if (colDescricao === -1) colDescricao = 9;
 
     var numLinhas = ultimaLinha - 1;
     var valoresData = aba.getRange(2, colData + 1, numLinhas, 1).getValues();
@@ -346,6 +597,9 @@ function obterTotaisTagSaf_(forcar) {
     var valoresDepartamento = aba.getRange(2, colDepartamento + 1, numLinhas, 1).getValues();
     var valoresDescricao = aba.getRange(2, colDescricao + 1, numLinhas, 1).getValues();
     var fuso = aba.getParent().getSpreadsheetTimeZone();
+    // Esta é a leitura mais cara do projeto (~58 mil linhas classificadas): o
+    // extrator nativo poupa ~160 mil chamadas ao serviço Utilities por rodada.
+    var lerData = fabricarLeitorDeData_(fuso);
 
     for (var i = 0; i < numLinhas; i++) {
       var data = valoresData[i][0];
@@ -355,21 +609,199 @@ function obterTotaisTagSaf_(forcar) {
       var tipo = null;
       if (relatoNorm.indexOf('condicao insegura') !== -1) tipo = 'condicaoInsegura';
       else if (relatoNorm.indexOf('ato inseguro') !== -1) tipo = 'comportamentoInseguro';
-      if (!tipo) continue;
+      if (!tipo) continue; // ignora "Ato Seguro" (observação positiva) e linhas em branco
 
-      var ano = Number(Utilities.formatDate(data, fuso, 'yyyy'));
-      var mes = Number(Utilities.formatDate(data, fuso, 'M'));
-      var dia = Number(Utilities.formatDate(data, fuso, 'd'));
+      var quando = lerData(data);
+      var ano = quando.ano;
+      var mes = quando.mes;
       var departamento = String(valoresDepartamento[i][0] || '').trim();
-      var descricao = String(valoresDescricao[i][0] || '').trim();
 
-      incrementarTagSaf_(resultado, ano, 'Todas', mes, dia, tipo, descricao);
-      if (departamento) incrementarTagSaf_(resultado, ano, departamento, mes, dia, tipo, descricao);
+      incrementarTagSaf_(resultado, ano, 'Todas', mes, tipo);
+      if (departamento) incrementarTagSaf_(resultado, ano, departamento, mes, tipo);
+
+      var descricao = String(valoresDescricao[i][0] || '').trim();
+      if (!descricao) continue;
+
+      var registro = {
+        dia: quando.dia,
+        departamento: departamento || '—',
+        descricao: descricao.slice(0, TAG_SAF_REG_MAX_DESCRICAO_)
+      };
+      // 'Todas' guarda o departamento de origem de cada linha — no feed do
+      // filtro "Todas" é o que diz de onde veio cada relato.
+      tagSafGuardarRegistro_(registros, ano, 'todas', mes, tipo, registro);
+      if (departamento) {
+        tagSafGuardarRegistro_(registros, ano, normalizarChaveTexto_(departamento), mes, tipo, registro);
+      }
     }
   }
 
   cacheGravarGrande_(TAG_SAF_CACHE_CHAVE_, resultado, TAG_SAF_CACHE_SEGUNDOS_);
+  gravarRegistrosTagSaf_(registros);
   return resultado;
+}
+
+/**
+ * Grava o mapa de registros em uma chave por ano+área, mais a sentinela do ano
+ * com a lista de áreas que têm relato. Tudo em poucos putAll em lote: uma
+ * chamada por chave seria uma centena de idas ao CacheService dentro de uma
+ * execução que já é a mais cara do projeto.
+ */
+function gravarRegistrosTagSaf_(registros) {
+  var cache = CacheService.getScriptCache();
+  var lote = {};
+  var indices = {};
+  var pendentes = 0;
+
+  function descarregar() {
+    if (!pendentes) return;
+    cache.putAll(lote, TAG_SAF_CACHE_SEGUNDOS_);
+    lote = {};
+    pendentes = 0;
+  }
+
+  Object.keys(registros).forEach(function (ano) {
+    var areas = Object.keys(registros[ano]);
+    var gravadas = [];
+
+    areas.forEach(function (chaveNorm) {
+      var chave = tagSafRegChave_(ano, chaveNorm);
+      var json = JSON.stringify(registros[ano][chaveNorm]);
+      var pedacos = Math.ceil(json.length / CACHE_PEDACO_CHARS_);
+      if (!pedacos || pedacos > CACHE_MAX_PEDACOS_) return; // área gigante: fica de fora, sem quebrar as outras
+
+      for (var i = 0; i < pedacos; i++) {
+        lote[chave + '_p' + i] = json.substr(i * CACHE_PEDACO_CHARS_, CACHE_PEDACO_CHARS_);
+        pendentes++;
+      }
+      indices[chave + '_idx'] = String(pedacos);
+      gravadas.push(chaveNorm);
+      if (pendentes >= 90) descarregar();
+    });
+
+    indices[TAG_SAF_REG_CACHE_PREFIXO_ + ano + TAG_SAF_REG_META_SUFIXO_] = JSON.stringify(gravadas);
+  });
+
+  descarregar();
+  // Índices por ÚLTIMO, como em cacheGravarGrande_: enquanto o _idx não existe,
+  // cacheLerGrande_ trata a chave como ausente e nunca lê um conjunto pela metade.
+  if (Object.keys(indices).length) cache.putAll(indices, TAG_SAF_CACHE_SEGUNDOS_);
+}
+
+/**
+ * Descrições dos relatos da TAG SAF para uma fatia da Pirâmide, sob demanda.
+ *
+ * Nunca lança: o feed é um extra: se falhar, a Pirâmide continua de pé e o
+ * painel mostra o aviso em vez de um erro de servidor.
+ *
+ * `area` chega no rótulo CANÔNICO da Cruz; a gravação usa a chave normalizada
+ * do departamento bruto da TAG SAF. As duas casam por normalizarChaveTexto_ —
+ * é a mesma regra que reconciliarTagSafComAreas_ usa pra unir as duas bases.
+ */
+function getTagSafRegistros(ano, area, periodo, tipo) {
+  try {
+    if (tipo !== 'condicaoInsegura' && tipo !== 'comportamentoInseguro') {
+      return { ok: false, erro: 'Tipo inválido.', registros: [] };
+    }
+
+    var anoNum = Number(ano);
+    var chaveNorm = (!area || area === 'Todas') ? 'todas' : normalizarChaveTexto_(area);
+    var cache = CacheService.getScriptCache();
+    var chaveMeta = TAG_SAF_REG_CACHE_PREFIXO_ + anoNum + TAG_SAF_REG_META_SUFIXO_;
+
+    var meta = cache.get(chaveMeta);
+    if (!meta) {
+      // Cache vencido (ou nunca montado): reconstrói lendo a planilha uma vez.
+      obterTotaisTagSaf_(true);
+      meta = cache.get(chaveMeta);
+    }
+
+    var areasComRegistro = meta ? JSON.parse(meta) : [];
+    if (areasComRegistro.indexOf(chaveNorm) === -1) {
+      // Área sem nenhum relato descrito neste ano — resposta vazia SEM reler a
+      // planilha. É o que evita que toda área silenciosa custe 70 mil linhas.
+      return { ok: true, ano: anoNum, area: area, registros: [], total: 0, truncado: false, maximoPorMes: TAG_SAF_REG_MAX_POR_BUCKET_ };
+    }
+
+    var pacote = cacheLerGrande_(tagSafRegChave_(anoNum, chaveNorm));
+    if (!pacote) {
+      obterTotaisTagSaf_(true);
+      pacote = cacheLerGrande_(tagSafRegChave_(anoNum, chaveNorm));
+    }
+    if (!pacote) return { ok: false, erro: 'Registros indisponíveis no momento.', registros: [] };
+
+    var meses = (periodo === 'todos' || !periodo)
+      ? [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
+      : [Number(periodo)];
+
+    var lista = [];
+    meses.forEach(function (mes) {
+      var balde = pacote[mes];
+      if (!balde || !balde[tipo]) return;
+      balde[tipo].forEach(function (r) {
+        lista.push({ dia: r.dia, mes: mes, departamento: r.departamento, descricao: r.descricao });
+      });
+    });
+
+    // Mais recentes primeiro: mês desc, depois dia desc.
+    lista.sort(function (a, b) { return (b.mes - a.mes) || (b.dia - a.dia); });
+
+    var total = lista.length;
+    return {
+      ok: true,
+      ano: anoNum,
+      area: area,
+      periodo: periodo,
+      tipo: tipo,
+      registros: lista.slice(0, TAG_SAF_REG_MAX_RETORNO_),
+      total: total,
+      truncado: total > TAG_SAF_REG_MAX_RETORNO_,
+      maximoPorMes: TAG_SAF_REG_MAX_POR_BUCKET_
+    };
+  } catch (e) {
+    return { ok: false, erro: String(e && e.message ? e.message : e), registros: [] };
+  }
+}
+
+/**
+ * Mede o custo real do cache de registros na planilha viva. Rodar no editor
+ * quando quiser conferir se algum ano+área está perto do teto de fatias.
+ */
+function debugTagSafRegistros() {
+  var cache = CacheService.getScriptCache();
+  obterTotaisTagSaf_(true);
+
+  var linhas = [];
+  getAnosDisponiveis().forEach(function (ano) {
+    var meta = cache.get(TAG_SAF_REG_CACHE_PREFIXO_ + ano + TAG_SAF_REG_META_SUFIXO_);
+    var areas = meta ? JSON.parse(meta) : [];
+    var maiorFatias = 0;
+    var maiorArea = '';
+    areas.forEach(function (chaveNorm) {
+      var idx = Number(cache.get(tagSafRegChave_(ano, chaveNorm) + '_idx')) || 0;
+      if (idx > maiorFatias) { maiorFatias = idx; maiorArea = chaveNorm; }
+    });
+    linhas.push(ano + ': ' + areas.length + ' áreas com relato · maior = ' + maiorArea +
+      ' (' + maiorFatias + ' de ' + CACHE_MAX_PEDACOS_ + ' fatias)');
+  });
+
+  var msg = linhas.join('\n');
+  Logger.log(msg);
+  return msg;
+}
+
+function debugMetasPlanta() {
+  var planilha = SpreadsheetApp.openById(HHT_SPREADSHEET_ID_);
+  var abas = planilha.getSheets().map(function (a) { return a.getName(); });
+  Logger.log('Abas disponíveis: ' + abas.join(' | '));
+
+  var aba = localizarAbaTolerante_(planilha, 'Metas 2026');
+  if (!aba) { Logger.log('Aba "Metas 2026" não encontrada nesta planilha.'); return; }
+
+  var cabecalhos = aba.getRange(1, 1, 1, aba.getLastColumn()).getValues()[0];
+  cabecalhos.forEach(function (c, i) {
+    if (String(c || '').trim()) Logger.log(i + ': "' + c + '"');
+  });
 }
 
 /**
@@ -437,12 +869,15 @@ function obterTagSafety_(forcar) {
   // pra que o debugTagSafety diga o que faltou, em vez de estourar.
   if (colData === -1) return resultado;
 
+  var lerData = fabricarLeitorDeData_(fuso); // ~9,6 mil linhas: mesma economia da TAG SAF
+
   for (var i = 1; i < dados.length; i++) {
     var data = dados[i][colData];
     if (!(data instanceof Date)) continue;
 
-    var ano = Number(Utilities.formatDate(data, fuso, 'yyyy'));
-    var mes = Number(Utilities.formatDate(data, fuso, 'M'));
+    var quando = lerData(data);
+    var ano = quando.ano;
+    var mes = quando.mes;
     if (!resultado[ano]) resultado[ano] = criarBlocoTagSafety_();
     var bloco = resultado[ano];
 
@@ -552,31 +987,157 @@ function debugTagSafety() {
   return r;
 }
 
-function obterAbaCompilado_(ano) {
-  var planilha = SpreadsheetApp.openById(BASE_HHT_SPREADSHEET_ID);
-  var aba = planilha.getSheetByName('Compilado ' + ano);
+/**
+ * Resolve os índices reais das colunas da aba "Cruz verde": casa cada
+ * cabeçalho por TERMO normalizado e cai na posição declarada se não achar.
+ * Devolve também `origem` por campo, para o debug dizer o que foi por nome e o
+ * que foi por posição — posição acertada por acaso é o tipo de coisa que só
+ * aparece meses depois, quando alguém insere uma coluna.
+ */
+function obterIndicesCruzVerde_(cabecalhos) {
+  var normalizados = cabecalhos.map(function (c) { return normalizarChaveTexto_(c); });
+  var indices = {}, origem = {};
 
-  if (!aba) {
-    throw new Error('Aba "Compilado ' + ano + '" não encontrada na base HHT.');
-  }
+  Object.keys(CRUZ_VERDE_CABECALHOS_).forEach(function (chave) {
+    var def = CRUZ_VERDE_CABECALHOS_[chave];
+    var achado = -1;
 
-  return aba;
+    def.termos.forEach(function (termo) {
+      if (achado !== -1) return;
+      for (var i = 0; i < normalizados.length; i++) {
+        if (normalizados[i] === termo || normalizados[i].indexOf(termo) === 0) { achado = i; return; }
+      }
+    });
+
+    indices[chave] = achado === -1 ? def.posicao : achado;
+    origem[chave] = achado === -1 ? 'posicao' : 'nome';
+  });
+
+  return { indices: indices, origem: origem, cabecalhos: cabecalhos };
 }
 
 /**
- * Lista os anos disponíveis, com base nas abas "Compilado {ano}" existentes.
+ * Lê a aba "Cruz verde" INTEIRA (todos os anos) e devolve as linhas já
+ * parseadas e classificadas. Uma leitura só, cacheada — a aba tem ~2,6 mil
+ * linhas e o custo é o mesmo para um ano ou para todos.
+ *
+ * Substituiu obterAbaCompilado_(ano), que abria uma aba por ano. Com aba única,
+ * ler por ano seria reler a mesma coisa N vezes.
+ *
+ * Formato: { linhas: [{ano, mes, dia, tipoEvento, rankNovo, classificacaoNM,
+ *   areaBruta, areaMicro, descricao}], anos: number[], diagnostico: {...} }
+ */
+function obterCruzVerdeLinhas_(forcar) {
+  if (!forcar) {
+    var cacheado = cacheLerGrande_(CRUZ_VERDE_CACHE_CHAVE_);
+    if (cacheado) return cacheado;
+  }
+
+  var planilha = SpreadsheetApp.openById(CRUZ_VERDE_SPREADSHEET_ID_);
+  var aba = localizarAbaTolerante_(planilha, CRUZ_VERDE_ABA_);
+  if (!aba) {
+    throw new Error('Aba "' + CRUZ_VERDE_ABA_ + '" não encontrada na planilha da Cruz Verde. Abas: ' +
+      planilha.getSheets().map(function (s) { return s.getName(); }).join(', '));
+  }
+
+  var ultimaLinha = aba.getLastRow();
+  var resultado = { linhas: [], anos: [], diagnostico: {} };
+  if (ultimaLinha < 2) return resultado;
+
+  var ultimaColuna = aba.getLastColumn();
+  var tudo = aba.getRange(1, 1, ultimaLinha, ultimaColuna).getValues();
+  var col = obterIndicesCruzVerde_(tudo[0]);
+  var idx = col.indices;
+
+  var fuso = aba.getParent().getSpreadsheetTimeZone();
+  var lerData = fabricarLeitorDeData_(fuso);
+
+  var anosVistos = {};
+  var semData = 0, semTipo = 0, foraDaSeveridade = {}, tipoNaoReconhecido = {};
+
+  for (var i = 1; i < tudo.length; i++) {
+    var linha = tudo[i];
+    var data = parseDataOcorrencia_(linha[idx.data]);
+    if (!data) { semData++; continue; }
+
+    var tipoEvento = classificarTipoEvento_(linha[idx.tipoEvento]);
+    if (!tipoEvento) {
+      var bruto = String(linha[idx.tipoEvento] || '').trim();
+      // Célula VAZIA tem contador próprio: sem isso a linha sumia sem aparecer
+      // em lugar nenhum do diagnóstico, e o total não fechava com a planilha.
+      if (bruto) tipoNaoReconhecido[bruto] = (tipoNaoReconhecido[bruto] || 0) + 1;
+      else semTipo++;
+      continue;
+    }
+
+    var rankNovo = CRUZ_SEGURANCA_SEVERIDADE.indexOf(tipoEvento);
+    if (rankNovo === -1) {
+      // Classificou, mas o tipo não entra na escala de gravidade da Cruz
+      // (é o caso de "Sem ocorrência"). Também não pode sumir calado.
+      foraDaSeveridade[tipoEvento] = (foraDaSeveridade[tipoEvento] || 0) + 1;
+      continue;
+    }
+
+    var quando = lerData(data);
+    anosVistos[quando.ano] = true;
+
+    var descricao = String(linha[idx.descricao] || '').trim();
+    if (descricao === '-' || descricao === '----') descricao = '';
+
+    resultado.linhas.push({
+      ano: quando.ano,
+      mes: quando.mes,
+      dia: quando.dia,
+      tipoEvento: tipoEvento,
+      rankNovo: rankNovo,
+      classificacaoNM: String(linha[idx.classificacaoNM] || '').trim().toUpperCase(),
+      areaBruta: String(linha[idx.area] || '').trim(),
+      areaMicro: String(linha[idx.areaMicro] || '').trim(),
+      descricao: descricao
+    });
+  }
+
+  resultado.anos = Object.keys(anosVistos).map(Number).sort(function (a, b) { return b - a; });
+  resultado.diagnostico = {
+    aba: aba.getName(),
+    linhasLidas: tudo.length - 1,
+    linhasValidas: resultado.linhas.length,
+    semData: semData,
+    semTipo: semTipo,
+    foraDaSeveridade: Object.keys(foraDaSeveridade).map(function (nome) {
+      return { nome: nome, total: foraDaSeveridade[nome] };
+    }),
+    origemColunas: col.origem,
+    indices: idx,
+    cabecalhos: col.cabecalhos.map(function (c) { return String(c || '').trim(); }),
+    // Tipo fora do vocabulário conhecido não some calado: se um rótulo novo
+    // aparecer na planilha, ele fica listado aqui em vez de virar linha perdida.
+    tipoNaoReconhecido: Object.keys(tipoNaoReconhecido).map(function (nome) {
+      return { nome: nome, total: tipoNaoReconhecido[nome] };
+    }).sort(function (a, b) { return b.total - a.total; })
+  };
+
+  cacheGravarGrande_(CRUZ_VERDE_CACHE_CHAVE_, resultado, CACHE_SEGUNDOS_30MIN_);
+  return resultado;
+}
+
+/**
+ * Anos disponíveis. Vinha dos NOMES das abas ("Compilado 2026"); com aba única,
+ * passou a sair das datas da própria base.
+ *
+ * É chamada em muitos pontos (bootstrap, aquecimento, limpeza de cache), então
+ * apoia-se no pacote cacheado — nunca abre a planilha por conta própria quando
+ * o cache está quente. Se a leitura falhar, devolve o ano corrente em vez de
+ * lançar: sem lista de anos a home inteira não monta.
  */
 function getAnosDisponiveis() {
-  var planilha = SpreadsheetApp.openById(BASE_HHT_SPREADSHEET_ID);
-  var anos = [];
-
-  planilha.getSheets().forEach(function (aba) {
-    var m = aba.getName().match(/^Compilado (\d{4})$/);
-    if (m) anos.push(Number(m[1]));
-  });
-
-  anos.sort(function (a, b) { return b - a; });
-  return anos;
+  try {
+    var pacote = obterCruzVerdeLinhas_();
+    if (pacote.anos && pacote.anos.length) return pacote.anos;
+  } catch (e) {
+    // cai no ano corrente abaixo
+  }
+  return [new Date().getFullYear()];
 }
 
 /**
@@ -592,7 +1153,86 @@ function getAnosDisponiveis() {
  */
 var AREA_APELIDOS_ = {
   'logistica': 'Logística Interna'
+  // NÃO mapear 'embalagem lavanderia' para Montagem Lavanderia. Isso chegou a
+  // ser feito em 25/08/2026, quando a área aparecia UMA vez na Cruz e parecia
+  // erro de digitação — e foi DESFEITO no mesmo dia: a lista de valores da
+  // coluna BC ("Employee Dept, Area (WHERE)") da base de Ocorrências mostra
+  // "EMBALAGEM - COCÇÃO" e "EMBALAGEM - LAVANDERIA" como áreas de CADASTRO.
+  // Fundir na Cruz uma área que a outra base trata como própria faria os dois
+  // lados divergirem justamente onde queremos que conversem.
 };
+
+/**
+ * Grupos por PREFIXO: toda grafia cuja chave normalizada começa com o prefixo
+ * cai no rótulo indicado, e esse rótulo é FIXO (não é a grafia mais frequente,
+ * como nos outros grupos) — o nome do grupo precisa valer para a família
+ * inteira, não para o membro que teve mais linhas no ano.
+ *
+ * Criado em 25/08/2026 a pedido do usuário para juntar as manutenções. Na
+ * planilha nova elas apareciam como TRÊS áreas no filtro — "Manutenção" (25),
+ * "Manutenção Montagem" (3) e "Manutenção Plástico" (1) — e a própria base
+ * alterna entre pôr a especialidade no macro e no micro: os micros de
+ * "Manutenção" são "manutenção montagem", "manutenção ferramentas metal",
+ * "manutenção fabricação plástico". A manutenção da montagem estava dividida
+ * entre dois baldes.
+ *
+ * Por PREFIXO e não por lista de apelidos porque variante nova ("Manutenção
+ * Ferramentaria") entra sozinha no grupo certo, sem ninguém lembrar de mexer
+ * aqui. A especialidade não se perde: continua na Área micro.
+ */
+var AREA_PREFIXOS_ = [
+  { prefixo: 'manutencao', rotulo: 'Manutenção' }
+];
+
+/**
+ * CADASTRO OFICIAL DE MACRO ÁREAS — área -> responsável (25/08/2026, decisão do
+ * usuário: esta tabela passa a ser a referência).
+ *
+ * É a TERCEIRA taxonomia de área do projeto, e a única que reflete a gestão:
+ * a Cruz Verde tem a coluna H, a base de Ocorrências tem a coluna BC, e nenhuma
+ * das três bate exatamente com as outras. Serve para (a) dizer quem responde por
+ * cada área e (b) medir a aderência das outras duas — ver
+ * debugAreasSemResponsavel.
+ *
+ * ATENÇÃO À GRANULARIDADE: "Kaizen Shop" e "Utilidades/Infraestrutura" são áreas
+ * PRÓPRIAS aqui, mas na Cruz Verde são MICROS de "Engenharia Industrial" (que,
+ * por sua vez, não tem responsável nesta lista). Enquanto a canonicalização não
+ * for desmembrada por micro, uma linha de Engenharia Industrial não encontra
+ * responsável — está medido, não esquecido.
+ *
+ * Chave = normalizarChaveTexto_ do nome oficial, para casar com qualquer grafia
+ * das outras bases sem depender de caixa, acento ou hífen.
+ */
+var AREA_RESPONSAVEL_ = {
+  'fabricacao plastico':     { area: 'Fabricação Plástico',        responsavel: 'TULIO GUIMARAES' },
+  'montagem coccao':         { area: 'Montagem Cocção',            responsavel: 'GUSTAVO Cavini' },
+  'logistica interna':       { area: 'Logística',                  responsavel: 'Igor G Valenca' },
+  'montagem lavanderia':     { area: 'Montagem Lavanderia',        responsavel: 'GABRIELA GREGO' },
+  'fabricacao coccao':       { area: 'Fabricação Cocção',          responsavel: 'DIEGO Amaral' },
+  'manutencao':              { area: 'Manutenção',                 responsavel: 'MARIANA SOUTO' },
+  'kaizen shop':             { area: 'Kaizen Shop',                responsavel: 'JANAINA GUIMARAES' },
+  'utilidades infraestrutura': { area: 'Utilidades/Infraestrutura', responsavel: 'JOSE FABIO' },
+  'fabricacao perfiladoras': { area: 'Fabricação Perfiladoras',    responsavel: 'TIAGO T Santos' }
+};
+
+/**
+ * Apelidos que ligam uma área das BASES ao cadastro oficial quando os dois
+ * nomes não casam por normalização. Só o que foi conferido caso a caso —
+ * chutar equivalência aqui atribuiria ocorrência ao responsável errado.
+ */
+var AREA_RESPONSAVEL_APELIDOS_ = {
+  'logistica': 'logistica interna',   // a Cruz escreve as duas formas
+  'utilidades': 'utilidades infraestrutura',
+  'infraestrutura': 'utilidades infraestrutura'
+};
+
+/** Responsável pela área, ou null se ela não está no cadastro oficial. */
+function responsavelDaArea_(rotuloArea) {
+  var chave = normalizarChaveTexto_(rotuloArea);
+  var alvo = AREA_RESPONSAVEL_APELIDOS_[chave] || chave;
+  var ficha = AREA_RESPONSAVEL_[alvo];
+  return ficha ? ficha.responsavel : null;
+}
 
 /**
  * Área (coluna I) tem grafias diferentes pra mesma área física — maiúsculas,
@@ -608,29 +1248,97 @@ function obterRotuloCanonicoArea_(contagemPorAreaBruta) {
   var grupos = {};
 
   Object.keys(contagemPorAreaBruta).forEach(function (bruto) {
-    var apelido = AREA_APELIDOS_[normalizarChaveTexto_(bruto)];
-    var chave = normalizarChaveTexto_(apelido || bruto);
-    if (!grupos[chave]) grupos[chave] = {};
-    grupos[chave][bruto] = contagemPorAreaBruta[bruto];
+    var chaveBruta = normalizarChaveTexto_(bruto);
+
+    // Prefixo tem precedência sobre apelido: agrupa a família inteira e traz
+    // rótulo próprio. Casa a chave exata OU o prefixo seguido de espaço, pra
+    // "manutencao" e "manutencao montagem" entrarem e um hipotético
+    // "manutencaoxyz" ficar de fora.
+    var porPrefixo = null;
+    for (var i = 0; i < AREA_PREFIXOS_.length; i++) {
+      var p = AREA_PREFIXOS_[i];
+      if (chaveBruta === p.prefixo || chaveBruta.indexOf(p.prefixo + ' ') === 0) {
+        porPrefixo = p;
+        break;
+      }
+    }
+
+    var chave, rotuloFixo = null;
+    if (porPrefixo) {
+      chave = 'prefixo:' + porPrefixo.prefixo;
+      rotuloFixo = porPrefixo.rotulo;
+    } else {
+      var apelido = AREA_APELIDOS_[chaveBruta];
+      chave = normalizarChaveTexto_(apelido || bruto);
+      // APELIDO TAMBÉM FIXA O RÓTULO. Antes o grupo continuava exibindo a
+      // grafia mais frequente, e isso dava dois problemas (medidos em
+      // 25/08/2026 por debugPonteAreas): "Logística" (329 linhas) vencia
+      // "Logística Interna" (216) e o grupo passava a se chamar pela forma
+      // ABREVIADA — que é justamente a que o apelido existe para corrigir; e o
+      // nome do filtro mudava conforme o ano que estivesse na tela. Declarar um
+      // apelido é dizer "este grupo se chama X", então X manda.
+      if (apelido) rotuloFixo = apelido;
+    }
+
+    if (!grupos[chave]) grupos[chave] = { rotuloFixo: rotuloFixo, grafias: {} };
+    grupos[chave].grafias[bruto] = contagemPorAreaBruta[bruto];
   });
 
   var mapa = {};
   Object.keys(grupos).forEach(function (chave) {
-    var grafias = grupos[chave];
-    var melhorGrafia = null;
-    var melhorContagem = -1;
-    Object.keys(grafias).forEach(function (grafia) {
-      if (grafias[grafia] > melhorContagem) {
-        melhorGrafia = grafia;
-        melhorContagem = grafias[grafia];
-      }
-    });
-    Object.keys(grafias).forEach(function (grafia) {
-      mapa[grafia] = melhorGrafia;
+    var grupo = grupos[chave];
+    var rotulo = grupo.rotuloFixo || escolherGrafiaCanonicaArea_(grupo.grafias);
+    Object.keys(grupo.grafias).forEach(function (grafia) {
+      mapa[grafia] = rotulo;
     });
   });
 
   return mapa;
+}
+
+/**
+ * Entre as grafias de um mesmo grupo, a que vira rótulo exibido: a MAIS
+ * FREQUENTE; em caso de empate, a mais bem escrita (ver qualidadeGrafiaArea_).
+ * Sem o desempate, "fabricação Cocção" e "Fabricação Cocção" (1 linha cada)
+ * eram resolvidas pela ordem de iteração das chaves — e em 25/08/2026 a planta
+ * apareceu no filtro com "f" minúsculo.
+ */
+function escolherGrafiaCanonicaArea_(grafias) {
+  var melhorGrafia = null;
+  var melhorContagem = -1;
+  var melhorQualidade = -1;
+
+  Object.keys(grafias).forEach(function (grafia) {
+    var contagem = grafias[grafia];
+    var qualidade = qualidadeGrafiaArea_(grafia);
+    if (contagem > melhorContagem ||
+        (contagem === melhorContagem && qualidade > melhorQualidade)) {
+      melhorGrafia = grafia;
+      melhorContagem = contagem;
+      melhorQualidade = qualidade;
+    }
+  });
+
+  return melhorGrafia;
+}
+
+/**
+ * Nota de apresentação de uma grafia de área, para desempate. Só entra em cena
+ * quando duas grafias da MESMA área têm o mesmo número de linhas.
+ *   2 — "Fabricação Cocção": inicial maiúscula e não grita
+ *   1 — "MONTAGEM - COCÇÃO": legível, mas caixa alta inteira
+ *   0 — "fabricação Cocção": começa em minúscula
+ */
+function qualidadeGrafiaArea_(texto) {
+  var t = String(texto || '').trim();
+  if (!t) return -1;
+
+  var primeira = t.charAt(0);
+  var comecaMaiuscula = primeira === primeira.toUpperCase() && primeira !== primeira.toLowerCase();
+  if (!comecaMaiuscula) return 0;
+
+  var temMinuscula = t !== t.toUpperCase();
+  return temMinuscula ? 2 : 1;
 }
 
 /**
@@ -654,25 +1362,14 @@ function reconciliarTagSafComAreas_(totaisTagSafTodos, ano, areasCanonicas) {
     if (!resultado[rotulo]) resultado[rotulo] = {};
 
     Object.keys(tagSafDoAno[chaveBruta]).forEach(function (mes) {
-      var atual = resultado[rotulo][mes] || { 
-          condicaoInsegura: 0, comportamentoInseguro: 0, 
-          registros: { condicaoInsegura: [], comportamentoInseguro: [] } 
-      };
+      var atual = resultado[rotulo][mes] || { condicaoInsegura: 0, comportamentoInseguro: 0 };
       var novo = tagSafDoAno[chaveBruta][mes];
 
-      var regCond = atual.registros.condicaoInsegura.concat(novo.registros ? novo.registros.condicaoInsegura : []);
-      var regComp = atual.registros.comportamentoInseguro.concat(novo.registros ? novo.registros.comportamentoInseguro : []);
-      
-      regCond.sort(function(a, b) { return b.dia - a.dia; });
-      regComp.sort(function(a, b) { return b.dia - a.dia; });
-
+      // Só contagem. As descrições não passam por aqui — vivem em cache próprio
+      // por ano+área e são buscadas sob demanda (getTagSafRegistros).
       resultado[rotulo][mes] = {
         condicaoInsegura: atual.condicaoInsegura + novo.condicaoInsegura,
-        comportamentoInseguro: atual.comportamentoInseguro + novo.comportamentoInseguro,
-        registros: {
-          condicaoInsegura: regCond.slice(0, 60),
-          comportamentoInseguro: regComp.slice(0, 60)
-        }
+        comportamentoInseguro: atual.comportamentoInseguro + novo.comportamentoInseguro
       };
     });
   });
@@ -708,7 +1405,10 @@ function reconciliarTagSafComAreas_(totaisTagSafTodos, ano, areasCanonicas) {
 // "fonte não configurada" mesmo com o código novo publicado. Foi o que aconteceu
 // em 2026-07-27 quando o campo `tagSafety` entrou (v1 -> v2). v3: o tagSafety
 // trocou `matriz` por `porAreaMes`.
-var CRUZ_CACHE_CHAVE_ = 'cruzAnoCompleto_v4_';
+// v5 em 2026-08-25: cada ocorrência do feed passou a carregar classificacaoNM
+// (A/B/C do Quase Acidente) e os registros da TAG SAF saíram do pacote. Mudou o
+// conteúdo, sobe a versão — senão o cache v4 serviria o formato antigo por 1h30.
+var CRUZ_CACHE_CHAVE_ = 'cruzAnoCompleto_v5_';
 var CRUZ_MEMO_ = {}; // deduplicação DENTRO de uma execução (getBootstrapDados usa 2x)
 
 /**
@@ -768,70 +1468,38 @@ function getCruzAnoCompleto(ano, forcar) {
 }
 
 function calcularCruzAnoCompleto_(ano, forcar) {
-  var aba = obterAbaCompilado_(ano);
-  var ultimaLinha = aba.getLastRow();
   var porDepartamentoMes = { 'Todas': {} };
   var totaisPorDepartamentoMes = { 'Todas': {} };
   var ocorrenciasPorDepartamentoMes = { 'Todas': {} };
   var departamentosVistos = {};
   var contagemPorAreaBruta = {};
-  var linhasValidas = [];
 
-  // Usar o fuso horário DA PLANILHA (não o do projeto Apps Script) pra extrair
-  // dia/mês. Se os dois fusos divergirem (ex: projeto em America/New_York e
-  // planilha em America/Sao_Paulo), data.getDate()/getMonth() "puxam" a data
-  // pro fuso do projeto e podem devolver o dia anterior.
-  var fusoPlanilha = aba.getParent().getSpreadsheetTimeZone();
+  // A leitura, o parse da data e a classificação do tipo agora acontecem uma vez
+  // só, para TODOS os anos, em obterCruzVerdeLinhas_ — a base virou aba única em
+  // 25/08/2026. Aqui sobra o recorte do ano e a agregação.
+  var pacote = obterCruzVerdeLinhas_(forcar);
+  var linhasValidas = pacote.linhas.filter(function (l) { return l.ano === Number(ano); });
 
-  if (ultimaLinha >= 2) {
-    var dados = aba.getRange(2, 1, ultimaLinha - 1, aba.getLastColumn()).getValues();
-
-    dados.forEach(function (linha) {
-      var tipoEventoBruto = String(linha[4] || '').trim(); // E
-      var classificacaoNM = String(linha[3] || '').trim().toUpperCase(); // D (A, B, C)
-      var data = linha[5]; // F
-      var departamentoBruto = String(linha[8] || '').trim(); // I
-
-      if (!(data instanceof Date)) return;
-
-      var tipoEvento = classificarTipoEvento_(tipoEventoBruto);
-      if (!tipoEvento) return;
-
-      var rankNovo = CRUZ_SEGURANCA_SEVERIDADE.indexOf(tipoEvento);
-      if (rankNovo === -1) return;
-
-      if (departamentoBruto) {
-        contagemPorAreaBruta[departamentoBruto] = (contagemPorAreaBruta[departamentoBruto] || 0) + 1;
-      }
-
-      linhasValidas.push({
-        tipoEvento: tipoEvento,
-        classificacaoNM: classificacaoNM,
-        rankNovo: rankNovo,
-        mes: Number(Utilities.formatDate(data, fusoPlanilha, 'M')),
-        dia: Number(Utilities.formatDate(data, fusoPlanilha, 'd')),
-        descricao: extrairDescricao_(linha),
-        departamentoBruto: departamentoBruto
-      });
-    });
-  }
+  linhasValidas.forEach(function (l) {
+    if (l.areaBruta) {
+      contagemPorAreaBruta[l.areaBruta] = (contagemPorAreaBruta[l.areaBruta] || 0) + 1;
+    }
+  });
 
   var mapaAreaCanonica = obterRotuloCanonicoArea_(contagemPorAreaBruta);
 
   linhasValidas.forEach(function (l) {
-    var area = l.departamentoBruto ? (mapaAreaCanonica[l.departamentoBruto] || l.departamentoBruto) : '';
+    var area = l.areaBruta ? (mapaAreaCanonica[l.areaBruta] || l.areaBruta) : '';
 
     atualizarDiaMaisGrave_(porDepartamentoMes, 'Todas', l.mes, l.dia, l.tipoEvento, l.rankNovo);
     atualizarTotais_(totaisPorDepartamentoMes, 'Todas', l.mes, l.tipoEvento, l.classificacaoNM);
-    // ENVIANDO A CLASSIFICAÇÃO:
     adicionarOcorrencia_(ocorrenciasPorDepartamentoMes, 'Todas', l.mes, l.dia, l.tipoEvento, area, l.descricao, l.classificacaoNM);
 
     if (area) {
       departamentosVistos[area] = true;
       atualizarDiaMaisGrave_(porDepartamentoMes, area, l.mes, l.dia, l.tipoEvento, l.rankNovo);
       atualizarTotais_(totaisPorDepartamentoMes, area, l.mes, l.tipoEvento, l.classificacaoNM);
-      // ENVIANDO A CLASSIFICAÇÃO:
-      adicionarOcorrencia_(ocorrenciasPorDepartamentoMes, area, l.mes, l.dia, l.tipoEvento, area, l.descricao, l.classificacaoNM);
+        adicionarOcorrencia_(ocorrenciasPorDepartamentoMes, area, l.mes, l.dia, l.tipoEvento, area, l.descricao, l.classificacaoNM);
     }
   });
 
@@ -923,7 +1591,7 @@ function atualizarTotais_(estrutura, departamento, mes, tipoEvento, classificaca
  * Só entram linhas com evento real (ignora "Sem ocorrência") e que tenham
  * descrição preenchida — sem isso não há o que mostrar no feed.
  */
-function adicionarOcorrencia_(estrutura, departamento, mes, dia, tipoEvento, departamentoOriginal, descricao) {
+function adicionarOcorrencia_(estrutura, departamento, mes, dia, tipoEvento, departamentoOriginal, descricao, classificacaoNM) {
   if (tipoEvento === 'Sem ocorrência' || !descricao) return;
 
   if (!estrutura[departamento]) estrutura[departamento] = {};
@@ -934,7 +1602,11 @@ function adicionarOcorrencia_(estrutura, departamento, mes, dia, tipoEvento, dep
     tipoEvento: tipoEvento,
     cor: CRUZ_SEGURANCA_CORES[tipoEvento],
     departamento: departamentoOriginal,
-    descricao: descricao
+    descricao: descricao,
+    // A, B ou C — só faz sentido em "Quase acidente". É o que permite ao feed
+    // da Pirâmide separar as três fatias azuis, que a coluna tipoEvento junta
+    // sob um único rótulo.
+    classificacaoNM: classificacaoNM || ''
   });
 }
 
@@ -986,35 +1658,1489 @@ function getContextoCruzSeguranca() {
 }
 
 /**
- * DIAGNÓSTICO — só leitura, não é chamada por nenhuma tela. Lista todo par
- * (Departamento | Área) que aparece de fato na Compilado {ano}, com a
- * contagem de linhas de cada um. Rodar direto no editor do Apps Script
- * (selecionar a função, Executar, depois ver em Execução > Registros) pra
- * comparar com os nomes de área do mapa da planta de Rio Claro e montar o
- * de-para local físico -> zona do mapa.
+ * DIAGNÓSTICO DA BASE NOVA DA CRUZ (25/08/2026). Rodar ANTES de confiar nos
+ * números: é o que prova que a troca de planilha leu as colunas certas.
+ *
+ * O que olhar no log, em ordem:
+ *   1. ORIGEM DAS COLUNAS — qualquer campo em "posicao" está apoiado no índice
+ *      declarado, não no cabeçalho. Funciona, mas quebra calado se alguém
+ *      inserir uma coluna. Com o nome real em mãos, acrescentar o termo em
+ *      CRUZ_VERDE_CABECALHOS_ e o campo passa a casar por nome.
+ *   2. TIPOS NÃO RECONHECIDOS — rótulo que a planilha usa e o portal não
+ *      entende. Cada um vira linha DESCARTADA da Cruz.
+ *   3. LINHAS SEM DATA e o total por ano — para bater com a planilha.
+ *   4. ÁREAS — os nomes que virão no filtro da Cruz.
  */
-function debugAreasCompiladoAno(ano) {
-  var aba = obterAbaCompilado_(ano || getAnosDisponiveis()[0]);
-  var ultimaLinha = aba.getLastRow();
-  var contagem = {};
+function debugCruzVerde(ano) {
+  var pacote = obterCruzVerdeLinhas_(true);
+  var d = pacote.diagnostico;
+  var alvo = Number(ano) || pacote.anos[0];
 
-  if (ultimaLinha >= 2) {
-    var dados = aba.getRange(2, 1, ultimaLinha - 1, aba.getLastColumn()).getValues();
+  var porAno = {};
+  var contagemBruta = {};
+  pacote.linhas.forEach(function (l) {
+    porAno[l.ano] = (porAno[l.ano] || 0) + 1;
+    if (l.ano === alvo && l.areaBruta) {
+      contagemBruta[l.areaBruta] = (contagemBruta[l.areaBruta] || 0) + 1;
+    }
+  });
+
+  // O QUE A TELA MOSTRA: as grafias brutas passam por obterRotuloCanonicoArea_,
+  // que unifica variantes (maiúsculas, acento, hífen) e aplica os apelidos
+  // manuais. Listar só o bruto, como esta função fazia, dava a impressão de
+  // dezenas de áreas onde o filtro mostra bem menos.
+  var mapaCanonico = obterRotuloCanonicoArea_(contagemBruta);
+  var porCanonica = {};
+  Object.keys(contagemBruta).forEach(function (bruta) {
+    var canonica = mapaCanonico[bruta] || bruta;
+    if (!porCanonica[canonica]) porCanonica[canonica] = { total: 0, grafias: [] };
+    porCanonica[canonica].total += contagemBruta[bruta];
+    porCanonica[canonica].grafias.push(bruta + ' (' + contagemBruta[bruta] + ')');
+  });
+
+  var descartadas = d.semData + (d.semTipo || 0) +
+    (d.tipoNaoReconhecido || []).reduce(function (a, t) { return a + t.total; }, 0) +
+    (d.foraDaSeveridade || []).reduce(function (a, t) { return a + t.total; }, 0);
+
+  var texto = [
+    'CRUZ VERDE — aba "' + d.aba + '" · ' + d.linhasLidas + ' linhas lidas, ' +
+      d.linhasValidas + ' válidas, ' + descartadas + ' descartadas',
+    '   descarte: ' + d.semData + ' sem data · ' + (d.semTipo || 0) + ' sem tipo · ' +
+      (d.tipoNaoReconhecido || []).reduce(function (a, t) { return a + t.total; }, 0) + ' tipo desconhecido · ' +
+      (d.foraDaSeveridade || []).reduce(function (a, t) { return a + t.total; }, 0) + ' fora da escala de gravidade',
+    '',
+    '1. ORIGEM DAS COLUNAS (nome = casou pelo cabeçalho; posicao = índice fixo):',
+  ].concat(
+    Object.keys(d.origemColunas).map(function (k) {
+      var i = d.indices[k];
+      var letra = String.fromCharCode(65 + i);
+      return '   ' + (d.origemColunas[k] === 'nome' ? ' nome  ' : ' POSIÇÃO') +
+        ' | ' + k + ' -> ' + letra + ' (' + i + ') "' + (d.cabecalhos[i] || '') + '"';
+    })
+  ).concat([
+    '',
+    '2. TIPOS NÃO RECONHECIDOS (viram linha descartada):',
+    d.tipoNaoReconhecido.length
+      ? d.tipoNaoReconhecido.map(function (t) { return '   ' + t.total + 'x  "' + t.nome + '"'; }).join('\n')
+      : '   (nenhum — todos os rótulos foram classificados)',
+    (d.foraDaSeveridade && d.foraDaSeveridade.length
+      ? '   fora da escala de gravidade da Cruz: ' +
+        d.foraDaSeveridade.map(function (t) { return t.total + 'x "' + t.nome + '"'; }).join(', ')
+      : ''),
+    '',
+    '3. LINHAS POR ANO:',
+    Object.keys(porAno).sort().map(function (a) { return '   ' + a + ': ' + porAno[a]; }).join('\n'),
+    '',
+    '4. ÁREAS EM ' + alvo + ' — ' + Object.keys(porCanonica).length + ' no filtro, de ' +
+      Object.keys(contagemBruta).length + ' grafias na planilha:',
+    Object.keys(porCanonica).sort(function (a, b) {
+      return porCanonica[b].total - porCanonica[a].total;
+    }).map(function (nome) {
+      var g = porCanonica[nome];
+      // Só abre a lista de grafias quando houve unificação — é aí que interessa
+      // ver o que foi juntado (e conferir se alguma junção está errada).
+      return '   ' + g.total + '  ' + nome +
+        (g.grafias.length > 1 ? '\n        <- ' + g.grafias.join(' · ') : '');
+    }).join('\n')
+  ]).join('\n');
+
+  Logger.log(texto);
+  return texto;
+}
+
+/**
+ * PONTE DE ÁREAS — a Cruz Verde e a base de Ocorrências (Boneco / painel)
+ * conversam?
+ *
+ * Motivo (25/08/2026): a Cruz filtra por "Área - Macro" (coluna H) e o Boneco
+ * agrupa pela coluna `Area` da base de Ocorrências, que é o nível LINHA/SETOR
+ * ("LINHA 8", "ALMOXARIFADO B"). O usuário levantou que a base de Ocorrências
+ * TAMBÉM tem uma coluna macro — BC, "Employee Dept, Area (WHERE)" — com a mesma
+ * taxonomia da Cruz, só em caixa alta com hífen. Se isso se confirmar, os dois
+ * filtros podem ser um só, sem de-para inventado.
+ *
+ * Esta função NÃO muda nada: só mede. As duas perguntas que decidem se a ponte
+ * pode ser construída:
+ *   1. COBERTURA — que fração das ocorrências de cada lado tem contraparte na
+ *      outra base depois da canonicalização? Área órfã vira filtro que devolve
+ *      vazio sem explicar por quê, que é pior do que dois filtros separados.
+ *   2. QUEM SÓ EXISTE DE UM LADO — é a lista para levar ao saneamento de
+ *      cadastro (a Cruz tem "Fabricação Lavanderia" e a lista de BC não).
+ *
+ * Compara TODOS os anos das duas bases, porque o cadastro de área não é um
+ * problema de um ano só.
+ */
+function debugPonteAreas() {
+  // ---- lado A: Cruz Verde (coluna H, macro) -------------------------------
+  var cruz = obterCruzVerdeLinhas_();
+  var brutasCruz = {};
+  cruz.linhas.forEach(function (l) {
+    if (l.areaBruta) brutasCruz[l.areaBruta] = (brutasCruz[l.areaBruta] || 0) + 1;
+  });
+  var canonCruz = obterRotuloCanonicoArea_(brutasCruz);
+  var porAreaCruz = {};
+  Object.keys(brutasCruz).forEach(function (b) {
+    var c = canonCruz[b] || b;
+    porAreaCruz[c] = (porAreaCruz[c] || 0) + brutasCruz[b];
+  });
+
+  // ---- lado B: Ocorrências, as DUAS colunas candidatas --------------------
+  var planilha = SpreadsheetApp.openById(OCORRENCIAS_SPREADSHEET_ID_);
+  var aba = localizarAbaTolerante_(planilha, OCORRENCIAS_ABA_);
+  // Loga antes de sair: `return` puro numa função de debug produz uma execução
+  // "concluída" com o log VAZIO, e quem rodou não sabe o que aconteceu.
+  if (!aba) return debugLogar_('Aba "' + OCORRENCIAS_ABA_ + '" não encontrada.');
+
+  var cabecalhos = aba.getRange(1, 1, 1, aba.getLastColumn()).getValues()[0];
+  var iArea = -1, iMacro = -1;
+  cabecalhos.forEach(function (nome, i) {
+    var n = String(nome || '').trim();
+    if (n === OCORRENCIAS_CABECALHOS_.area) iArea = i;
+    if (normalizarChaveTexto_(n).indexOf('employee dept') === 0) iMacro = i;
+  });
+
+  if (iMacro === -1) {
+    return 'Coluna "Employee Dept, Area (WHERE)" não encontrada na aba de Ocorrências.\n' +
+      'Cabeçalhos: ' + cabecalhos.map(function (c) { return String(c || '').trim(); })
+        .filter(function (c) { return c; }).join(' | ');
+  }
+
+  var ultima = aba.getLastRow();
+  var brutasOcor = {}, brutasMicro = {}, semMacro = 0;
+  if (ultima > 1) {
+    var dados = aba.getRange(2, 1, ultima - 1, Math.max(iArea, iMacro) + 1).getValues();
     dados.forEach(function (linha) {
-      var departamento = String(linha[8] || '').trim(); // I
-      var area = String(linha[9] || '').trim(); // J
-      if (!departamento && !area) return;
-      var chave = departamento + ' | ' + area;
-      contagem[chave] = (contagem[chave] || 0) + 1;
+      var macro = String(linha[iMacro] || '').trim();
+      if (macro) brutasOcor[macro] = (brutasOcor[macro] || 0) + 1;
+      else semMacro++;
+      if (iArea !== -1) {
+        var micro = String(linha[iArea] || '').trim();
+        if (micro) brutasMicro[micro] = (brutasMicro[micro] || 0) + 1;
+      }
     });
   }
 
-  var linhas = Object.keys(contagem).sort().map(function (chave) {
-    return chave + '  ->  ' + contagem[chave];
+  // Canonicaliza o lado B com a MESMA função do lado A — é isso que faz
+  // "MONTAGEM - COCÇÃO" e "Montagem Cocção" caírem no mesmo rótulo.
+  var canonOcor = obterRotuloCanonicoArea_(brutasOcor);
+  var porAreaOcor = {};
+  Object.keys(brutasOcor).forEach(function (b) {
+    var c = canonOcor[b] || b;
+    porAreaOcor[c] = (porAreaOcor[c] || 0) + brutasOcor[b];
   });
 
-  Logger.log(linhas.join('\n'));
-  return linhas;
+  // ---- cruzamento: compara pela CHAVE normalizada -------------------------
+  var chaveDe = function (rotulo) { return normalizarChaveTexto_(rotulo); };
+  var chavesCruz = {}, chavesOcor = {};
+  Object.keys(porAreaCruz).forEach(function (r) { chavesCruz[chaveDe(r)] = { rotulo: r, total: porAreaCruz[r] }; });
+  Object.keys(porAreaOcor).forEach(function (r) { chavesOcor[chaveDe(r)] = { rotulo: r, total: porAreaOcor[r] }; });
+
+  var casadas = [], soCruz = [], soOcor = [];
+  Object.keys(chavesCruz).forEach(function (k) {
+    if (chavesOcor[k]) casadas.push({ k: k, cruz: chavesCruz[k], ocor: chavesOcor[k] });
+    else soCruz.push(chavesCruz[k]);
+  });
+  Object.keys(chavesOcor).forEach(function (k) {
+    if (!chavesCruz[k]) soOcor.push(chavesOcor[k]);
+  });
+
+  var soma = function (lista, campo) {
+    return lista.reduce(function (a, x) { return a + (campo ? x[campo].total : x.total); }, 0);
+  };
+  var totalCruz = soma(casadas, 'cruz') + soma(soCruz);
+  var totalOcor = soma(casadas, 'ocor') + soma(soOcor);
+  var pct = function (parte, todo) { return todo > 0 ? Math.round((parte / todo) * 1000) / 10 : 0; };
+
+  var texto = [
+    'PONTE DE ÁREAS — Cruz Verde  x  Ocorrências (coluna BC)',
+    '',
+    'COBERTURA (é o número que decide se dá pra ligar os filtros):',
+    '   Cruz: ' + pct(soma(casadas, 'cruz'), totalCruz) + '% das ' + totalCruz +
+      ' linhas caem em área que a base de Ocorrências também tem',
+    '   Ocor: ' + pct(soma(casadas, 'ocor'), totalOcor) + '% das ' + totalOcor +
+      ' linhas caem em área que a Cruz também tem',
+    '   ' + casadas.length + ' áreas em comum · ' + soCruz.length + ' só na Cruz · ' +
+      soOcor.length + ' só em Ocorrências',
+    (semMacro ? '   ATENÇÃO: ' + semMacro + ' linhas de Ocorrências com a coluna BC VAZIA' : ''),
+    '',
+    'ÁREAS EM COMUM (Cruz / Ocorrências):',
+    casadas.sort(function (a, b) { return b.cruz.total - a.cruz.total; })
+      .map(function (c) {
+        return '   ' + c.cruz.rotulo + '  ->  ' + c.cruz.total + ' / ' + c.ocor.total +
+          (chaveDe(c.cruz.rotulo) === chaveDe(c.ocor.rotulo) && c.cruz.rotulo !== c.ocor.rotulo
+            ? '   (Ocor escreve "' + c.ocor.rotulo + '")' : '');
+      }).join('\n'),
+    '',
+    'SÓ NA CRUZ (filtrar por estas deixaria o Boneco VAZIO):',
+    soCruz.length
+      ? soCruz.sort(function (a, b) { return b.total - a.total; })
+          .map(function (x) { return '   ' + x.total + '  ' + x.rotulo; }).join('\n')
+      : '   (nenhuma)',
+    '',
+    'SÓ EM OCORRÊNCIAS (existem no cadastro e nunca apareceram na Cruz):',
+    soOcor.length
+      ? soOcor.sort(function (a, b) { return b.total - a.total; })
+          .map(function (x) { return '   ' + x.total + '  ' + x.rotulo; }).join('\n')
+      : '   (nenhuma)',
+    '',
+    'DE ONDE VEIO CADA COLUNA:',
+    '   Cruz  -> "' + CRUZ_VERDE_ABA_ + '" coluna H (Área - Macro)',
+    '   Ocor  -> "' + String(cabecalhos[iMacro]).trim() + '" (índice ' + iMacro + ')',
+    '   hoje o Boneco usa "' + OCORRENCIAS_CABECALHOS_.area + '" (índice ' + iArea + '), que é o nível MICRO —',
+    '   ' + Object.keys(brutasMicro).length + ' valores distintos, contra ' +
+      Object.keys(brutasOcor).length + ' na coluna macro.'
+  ].join('\n');
+
+  Logger.log(texto);
+  return texto;
+}
+
+// ESCREVA AQUI o texto a procurar (nº do caso, nome, trecho da descrição) e rode
+// debugRastrearOcorrencia() sem argumento. Vazio = mostra as mais recentes.
+// Existe porque o editor do Apps Script não passa parâmetros para a função.
+var RASTREIO_TERMO_ = '';
+
+/**
+ * Loga e devolve a MESMA mensagem. Existe para as saídas antecipadas das funções
+ * de debug: `return 'algum erro'` puro produz uma execução "concluída" com o log
+ * VAZIO, e quem rodou fica sem saber o que houve — aconteceu em 25/08/2026.
+ */
+function debugLogar_(mensagem) {
+  Logger.log(mensagem);
+  return mensagem;
+}
+
+// Meses por extenso/abreviados, PT e EN, para datas que chegam como TEXTO.
+// Sem ponto e sem acento — a chave é normalizada antes de bater.
+var MESES_TEXTO_ = {
+  jan: 1, fev: 2, mar: 3, abr: 4, mai: 5, jun: 6,
+  jul: 7, ago: 8, set: 9, out: 10, nov: 11, dez: 12,
+  feb: 2, apr: 4, may: 5, aug: 8, sep: 9, oct: 10, dec: 12
+};
+
+/**
+ * Interpreta a Case Date aceitando também TEXTO.
+ *
+ * POR QUE EXISTE (25/08/2026): abril e maio de 2026 tinham ZERO ocorrências no
+ * Boneco, e a base tinha. As células dessas linhas não são Date, são texto no
+ * formato "06-May-2026" / "9-jun.-2026" — e o código descartava com
+ * `if (!(data instanceof Date)) return`, sem contar nem avisar.
+ *
+ * Formatos cobertos: Date nativo · "06-May-2026" · "9-jun.-2026" · "2026-05-06"
+ * · "06/05/2026" (dd/mm, padrão BR).
+ *
+ * DEVOLVE null quando não entende — nunca uma data chutada. Data errada é pior
+ * que ocorrência faltando: ela entra no mês errado e ninguém percebe.
+ */
+function parseDataOcorrencia_(valor) {
+  if (valor instanceof Date) return isNaN(valor.getTime()) ? null : valor;
+
+  var texto = String(valor || '').trim();
+  if (!texto) return null;
+
+  // Corta hora, se vier junto ("06-May-2026 12:00 AM").
+  texto = texto.split(' ')[0];
+
+  // ISO: 2026-05-06
+  var iso = texto.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
+  if (iso) return montarDataSegura_(Number(iso[1]), Number(iso[2]), Number(iso[3]));
+
+  // Com nome de mês: 06-May-2026 · 9-jun.-2026 · 06/mai/2026
+  var comNome = texto.match(/^(\d{1,2})[-\/\s]+([A-Za-zçÇáéíóúÁÉÍÓÚ.]+)[-\/\s]+(\d{4})$/);
+  if (comNome) {
+    var chave = normalizarTexto_(comNome[2]).replace(/[^a-z]/g, '').slice(0, 3);
+    var mes = MESES_TEXTO_[chave];
+    if (mes) return montarDataSegura_(Number(comNome[3]), mes, Number(comNome[1]));
+    return null;
+  }
+
+  // Numérico: 06/05/2026. Padrão BR — dia primeiro. O 3º campo tem 4 dígitos,
+  // então não há ambiguidade sobre onde está o ano.
+  var num = texto.match(/^(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{4})$/);
+  if (num) return montarDataSegura_(Number(num[3]), Number(num[2]), Number(num[1]));
+
+  return null;
+}
+
+/** Monta a data e confere que ela não "rolou" (31/02 viraria 03/03). */
+function montarDataSegura_(ano, mes, dia) {
+  if (!(ano > 1900) || !(mes >= 1 && mes <= 12) || !(dia >= 1 && dia <= 31)) return null;
+  var d = new Date(ano, mes - 1, dia);
+  if (d.getFullYear() !== ano || d.getMonth() !== mes - 1 || d.getDate() !== dia) return null;
+  return d;
+}
+
+/**
+ * Mede o estrago das datas em TEXTO na base de Ocorrências: quantas linhas o
+ * portal está descartando hoje, em que meses elas caem, e o que o parser
+ * tolerante recupera. Mostra o texto BRUTO ao lado da data interpretada, para
+ * conferir a olho antes de ligar o parser em produção.
+ */
+function debugDatasOcorrencias() {
+  var planilha = SpreadsheetApp.openById(OCORRENCIAS_SPREADSHEET_ID_);
+  var aba = localizarAbaTolerante_(planilha, OCORRENCIAS_ABA_);
+  if (!aba) return debugLogar_('Aba "' + OCORRENCIAS_ABA_ + '" não encontrada.');
+
+  var idx = obterIndicesOcorrencias_(aba);
+  var ultima = aba.getLastRow();
+  if (ultima < 2) return debugLogar_('Aba vazia.');
+
+  var dados = aba.getRange(2, 1, ultima - 1, idx.caseDate + 1).getValues();
+  var nativas = 0, recuperadas = [], perdidas = [], vazias = 0;
+  var porMesRecuperado = {};
+
+  dados.forEach(function (linha, i) {
+    var bruto = linha[idx.caseDate];
+    if (bruto instanceof Date && !isNaN(bruto.getTime())) { nativas++; return; }
+    if (String(bruto || '').trim() === '') { vazias++; return; }
+
+    var d = parseDataOcorrencia_(bruto);
+    if (d) {
+      var chave = d.getFullYear() + '-' + ('0' + (d.getMonth() + 1)).slice(-2);
+      porMesRecuperado[chave] = (porMesRecuperado[chave] || 0) + 1;
+      if (recuperadas.length < 15) {
+        recuperadas.push('   linha ' + (i + 2) + ':  "' + String(bruto) + '"   ->   ' +
+          ('0' + d.getDate()).slice(-2) + '/' + ('0' + (d.getMonth() + 1)).slice(-2) + '/' + d.getFullYear());
+      }
+    } else if (perdidas.length < 15) {
+      perdidas.push('   linha ' + (i + 2) + ':  "' + String(bruto) + '"  (tipo ' + typeof bruto + ')');
+    }
+  });
+
+  var totalRecuperado = Object.keys(porMesRecuperado)
+    .reduce(function (a, k) { return a + porMesRecuperado[k]; }, 0);
+
+  var texto = [
+    'DATAS DA ABA "' + OCORRENCIAS_ABA_ + '" — ' + dados.length + ' linhas',
+    '',
+    '   ' + nativas + ' com data de verdade (Date)  ->  o portal ENXERGA',
+    '   ' + totalRecuperado + ' em TEXTO, recuperáveis  ->  o portal DESCARTA hoje',
+    '   ' + (dados.length - nativas - totalRecuperado - vazias) + ' em formato não reconhecido',
+    '   ' + vazias + ' vazias',
+    '',
+    'MESES QUE VOLTAM SE O PARSER FOR LIGADO:',
+    Object.keys(porMesRecuperado).sort().map(function (k) {
+      return '   ' + k + ': ' + porMesRecuperado[k];
+    }).join('\n') || '   (nenhum)',
+    '',
+    'AMOSTRA DO QUE SERIA RECUPERADO (confira dia x mês a olho):',
+    recuperadas.join('\n') || '   (nenhuma)',
+    '',
+    'AINDA NÃO RECONHECIDAS (precisam de regra nova):',
+    perdidas.join('\n') || '   (nenhuma)'
+  ].join('\n');
+
+  Logger.log(texto);
+  return texto;
+}
+
+/**
+ * RASTREIA UMA OCORRÊNCIA da base FAI/REC e explica, campo a campo, onde ela cai
+ * no Boneco — ou por que NÃO cai.
+ *
+ * Criado em 25/08/2026, quando o usuário apontou uma ocorrência real (olho,
+ * LOGISTICA INTERNA, 06/05/2026) que não aparecia no boneco. Adivinhar entre as
+ * cinco causas possíveis (ano, mês, área, categoria, região) é chute; esta
+ * função mostra o caminho inteiro.
+ *
+ * COMO USAR NO EDITOR: o editor do Apps Script executa a função SEM argumentos.
+ * Por isso há duas formas:
+ *   - rodar direto, sem nada: mostra as ocorrências MAIS RECENTES da base;
+ *   - escrever o termo em RASTREIO_TERMO_ (logo abaixo) e rodar: busca aquele.
+ * Passar o argumento só funciona chamando de outra função.
+ *
+ * @param {string} [termo] Qualquer texto da linha: nome, número do caso, descrição.
+ */
+function debugRastrearOcorrencia(termo) {
+  var alvo = normalizarTexto_(termo || RASTREIO_TERMO_ || '').trim();
+  var modoRecentes = !alvo;
+
+  var planilha = SpreadsheetApp.openById(OCORRENCIAS_SPREADSHEET_ID_);
+  var aba = localizarAbaTolerante_(planilha, OCORRENCIAS_ABA_);
+  if (!aba) return debugLogar_('Aba "' + OCORRENCIAS_ABA_ + '" não encontrada.');
+
+  var idx = obterIndicesOcorrencias_(aba);
+  var fuso = aba.getParent().getSpreadsheetTimeZone();
+  var ultima = aba.getLastRow();
+  if (ultima < 2) return debugLogar_('Aba "' + OCORRENCIAS_ABA_ + '" está vazia.');
+
+  var dados = aba.getRange(2, 1, ultima - 1, aba.getLastColumn()).getValues();
+
+  // Canonicalização da área igual à de obterPartesDoCorpoTudo_ — o veredito
+  // precisa refletir o que o Boneco realmente faz, não uma aproximação.
+  var contagemAreaBruta = {};
+  dados.forEach(function (linha) {
+    var b = String(linha[idx.areaMacro] || '').trim();
+    if (b) contagemAreaBruta[b] = (contagemAreaBruta[b] || 0) + 1;
+  });
+  var mapaAreaCanonica = obterRotuloCanonicoArea_(contagemAreaBruta);
+
+  // Sem termo: as 25 mais recentes, em formato COMPACTO (uma linha cada). Eram 5
+  // no formato longo, e em 25/08/2026 isso não bastou — a ocorrência que o
+  // usuário procurava era a 6ª, e depender de ele editar RASTREIO_TERMO_ para
+  // chegar nela foi atrito à toa. 25 cobre vários meses e ainda cabe no log.
+  var candidatas = dados.map(function (linha, i) { return { linha: linha, i: i }; });
+  if (modoRecentes) {
+    candidatas = candidatas.map(function (c) {
+      c.data = parseDataOcorrencia_(c.linha[idx.caseDate]);
+      return c;
+    }).filter(function (c) { return !!c.data; })
+      .sort(function (a, b) { return b.data.getTime() - a.data.getTime(); })
+      .slice(0, 25);
+  }
+
+  var achadas = [];
+  candidatas.forEach(function (candidata) {
+    var linha = candidata.linha;
+    var i = candidata.i;
+    if (!modoRecentes) {
+      var texto = normalizarTexto_(linha.join(' | '));
+      if (texto.indexOf(alvo) === -1) return;
+    }
+    if (achadas.length >= 25) return;   // teto: termo genérico não deve despejar a base
+
+    var dataCaso = parseDataOcorrencia_(linha[idx.caseDate]);
+    var temData = !!dataCaso;
+
+    var ehRecordable = normalizarTexto_(linha[idx.locallyReportable]).trim() === 'yes';
+    var dafw = flagVerdadeiro_(linha[idx.dafw]);
+    var categoria = !ehRecordable ? 'primeirosSocorros' : (dafw ? 'comAfastamento' : 'semAfastamento');
+
+    var regiaoDetalhada = regiaoCorpoDoTexto_(linha[idx.detailedBodyPart]);
+    var regiao = regiaoDetalhada === 'outro' ? regiaoCorpoDoTexto_(linha[idx.bodyPart]) : regiaoDetalhada;
+
+    var areaBruta = String(linha[idx.areaMacro] || '').trim();
+    var areaCanonica = areaBruta ? (mapaAreaCanonica[areaBruta] || areaBruta) : 'Não informado';
+
+    // Compacto na listagem, detalhado na busca por termo: 25 fichas longas
+    // seriam 500 linhas de log e ninguém acha nada nelas.
+    if (modoRecentes) {
+      var pad = function (t, n) {
+        t = String(t);
+        return t.length >= n ? t.slice(0, n) : t + Array(n - t.length + 1).join(' ');
+      };
+      achadas.push('  ' + pad(temData ? Utilities.formatDate(dataCaso, fuso, 'dd/MM/yyyy') : 'SEM DATA', 11) +
+        ' | ' + pad(categoria, 18) +
+        ' | ' + pad(regiao, 10) +
+        ' | ' + pad(areaCanonica, 32) +
+        ' | ' + String(linha[idx.detailedBodyPart] || linha[idx.bodyPart] || ''));
+      return;
+    }
+
+    achadas.push([
+      '--- linha ' + (i + 2) + ' da planilha ---',
+      '  Case Date      : ' + (temData ? Utilities.formatDate(dataCaso, fuso, 'dd/MM/yyyy') : 'INVÁLIDA -> LINHA DESCARTADA') +
+        (temData ? '   (ano ' + Utilities.formatDate(dataCaso, fuso, 'yyyy') +
+          ', mês ' + Utilities.formatDate(dataCaso, fuso, 'M') + ')' : ''),
+      '  Locally Report.: "' + String(linha[idx.locallyReportable] || '') + '"  -> recordable = ' + ehRecordable,
+      '  Inj. DAFW?     : "' + String(linha[idx.dafw] || '') + '"  -> ' + dafw,
+      '  CATEGORIA      : ' + categoria,
+      '  Body Part      : "' + String(linha[idx.bodyPart] || '') + '"',
+      '  Detailed       : "' + String(linha[idx.detailedBodyPart] || '') + '"',
+      '  REGIÃO         : ' + regiao + (regiao === 'outro' ? '   (cai no balde "outro")' : ''),
+      '  Área macro (BC): "' + areaBruta + '"  -> agrupada como "' + areaCanonica + '"',
+      '  Área micro     : "' + String(linha[idx.area] || '') + '"   (só detalhe do feed)',
+      '',
+      '  PARA VER NO BONECO, os filtros precisam estar em:',
+      '     Ano   = ' + (temData ? Utilities.formatDate(dataCaso, fuso, 'yyyy') : '—'),
+      '     Mês   = ' + (temData ? Utilities.formatDate(dataCaso, fuso, 'M') : '—') + '  (ou "Todo o período")',
+      '     Área  = "' + areaCanonica + '"  (ou "Todas")',
+      '     Categoria = ' + categoria + '  (ou "Todas")',
+      '     e a região pintada é ' + regiao
+    ].join('\n'));
+  });
+
+  var texto;
+  if (!achadas.length) {
+    texto = 'Nenhuma linha da aba "' + OCORRENCIAS_ABA_ + '" contém "' + alvo + '".\n' +
+      'Confira o termo em RASTREIO_TERMO_ (acentos e espaços contam pouco, mas o texto precisa existir na linha).';
+  } else if (modoRecentes) {
+    texto = 'RASTREIO — as ' + achadas.length + ' ocorrências MAIS RECENTES da base\n' +
+      'Para a ficha COMPLETA de um caso, escreva um termo dele em RASTREIO_TERMO_ (topo do Code.js) e rode de novo.\n' +
+      '\n  DATA        | CATEGORIA          | REGIÃO     | ÁREA (macro, como o Boneco agrupa) | PARTE DO CORPO\n' +
+      '  ' + Array(100).join('-') + '\n' +
+      achadas.join('\n');
+  } else {
+    texto = 'RASTREIO DE "' + alvo + '" — ' + achadas.length + ' linha(s)\n\n' + achadas.join('\n\n');
+  }
+
+  // SEMPRE loga, inclusive nos caminhos de saída antecipada: a 1ª versão saía
+  // com `return` puro quando não havia termo, e o usuário via uma execução
+  // concluída com o log VAZIO, sem saber o que tinha acontecido.
+  Logger.log(texto);
+  return texto;
+}
+
+/**
+ * ÁREAS SEM RESPONSÁVEL — a lista para cobrar o preenchimento do cadastro.
+ *
+ * Cruza as DUAS bases (Cruz Verde coluna H e Ocorrências coluna BC) contra
+ * AREA_RESPONSAVEL_ e devolve, ordenado por volume, tudo que aparece nos dados
+ * e não tem dono. Volume é o que importa: uma área com 285 ocorrências sem
+ * responsável é um problema diferente de uma com 1.
+ *
+ * Mostra também o inverso — área do cadastro que NUNCA apareceu nos dados —,
+ * porque isso costuma ser nome divergente, não área inativa.
+ */
+function debugAreasSemResponsavel() {
+  // ---- Cruz Verde ---------------------------------------------------------
+  var cruz = obterCruzVerdeLinhas_();
+  var brutasCruz = {};
+  cruz.linhas.forEach(function (l) {
+    if (l.areaBruta) brutasCruz[l.areaBruta] = (brutasCruz[l.areaBruta] || 0) + 1;
+  });
+  var canonCruz = obterRotuloCanonicoArea_(brutasCruz);
+  var porAreaCruz = {};
+  Object.keys(brutasCruz).forEach(function (b) {
+    var c = canonCruz[b] || b;
+    porAreaCruz[c] = (porAreaCruz[c] || 0) + brutasCruz[b];
+  });
+
+  // ---- Ocorrências (coluna BC) -------------------------------------------
+  var porAreaOcor = {};
+  try {
+    var planilha = SpreadsheetApp.openById(OCORRENCIAS_SPREADSHEET_ID_);
+    var aba = localizarAbaTolerante_(planilha, OCORRENCIAS_ABA_);
+    var cabecalhos = aba.getRange(1, 1, 1, aba.getLastColumn()).getValues()[0];
+    var iMacro = -1;
+    cabecalhos.forEach(function (nome, i) {
+      if (normalizarChaveTexto_(String(nome || '')).indexOf('employee dept') === 0) iMacro = i;
+    });
+
+    if (iMacro !== -1 && aba.getLastRow() > 1) {
+      var dados = aba.getRange(2, 1, aba.getLastRow() - 1, iMacro + 1).getValues();
+      var brutasOcor = {};
+      dados.forEach(function (linha) {
+        var m = String(linha[iMacro] || '').trim();
+        if (m) brutasOcor[m] = (brutasOcor[m] || 0) + 1;
+      });
+      var canonOcor = obterRotuloCanonicoArea_(brutasOcor);
+      Object.keys(brutasOcor).forEach(function (b) {
+        var c = canonOcor[b] || b;
+        porAreaOcor[c] = (porAreaOcor[c] || 0) + brutasOcor[b];
+      });
+    }
+  } catch (e) {
+    porAreaOcor = {};
+  }
+
+  // ---- junta as duas bases por chave normalizada --------------------------
+  var todas = {};
+  var somar = function (mapa, campo) {
+    Object.keys(mapa).forEach(function (rotulo) {
+      var chave = normalizarChaveTexto_(rotulo);
+      if (!todas[chave]) todas[chave] = { rotulo: rotulo, cruz: 0, ocor: 0 };
+      todas[chave][campo] += mapa[rotulo];
+    });
+  };
+  somar(porAreaCruz, 'cruz');
+  somar(porAreaOcor, 'ocor');
+
+  var semDono = [], comDono = [];
+  Object.keys(todas).forEach(function (chave) {
+    var item = todas[chave];
+    item.total = item.cruz + item.ocor;
+    item.responsavel = responsavelDaArea_(item.rotulo);
+    (item.responsavel ? comDono : semDono).push(item);
+  });
+  semDono.sort(function (a, b) { return b.total - a.total; });
+
+  // Cadastro sem dado: normalmente é nome divergente, não área inativa.
+  var vistas = {};
+  Object.keys(todas).forEach(function (chave) {
+    var r = responsavelDaArea_(todas[chave].rotulo);
+    if (r) vistas[r] = true;
+  });
+  var semDado = Object.keys(AREA_RESPONSAVEL_).filter(function (k) {
+    return !vistas[AREA_RESPONSAVEL_[k].responsavel];
+  }).map(function (k) { return AREA_RESPONSAVEL_[k]; });
+
+  var totalCruz = Object.keys(porAreaCruz).reduce(function (a, k) { return a + porAreaCruz[k]; }, 0);
+  var totalOcor = Object.keys(porAreaOcor).reduce(function (a, k) { return a + porAreaOcor[k]; }, 0);
+  var semDonoCruz = semDono.reduce(function (a, x) { return a + x.cruz; }, 0);
+  var semDonoOcor = semDono.reduce(function (a, x) { return a + x.ocor; }, 0);
+  var pct = function (p, t) { return t > 0 ? Math.round((p / t) * 1000) / 10 : 0; };
+
+  var texto = [
+    'ÁREAS SEM RESPONSÁVEL — cadastro oficial tem ' + Object.keys(AREA_RESPONSAVEL_).length + ' áreas',
+    '',
+    '   ' + semDono.length + ' áreas nos dados sem responsável',
+    '   Cruz Verde: ' + semDonoCruz + ' de ' + totalCruz + ' linhas (' + pct(semDonoCruz, totalCruz) + '%)',
+    '   Ocorrências: ' + semDonoOcor + ' de ' + totalOcor + ' linhas (' + pct(semDonoOcor, totalOcor) + '%)',
+    '',
+    'PARA COBRAR (área · linhas na Cruz / em Ocorrências):',
+    semDono.map(function (x) {
+      return '   ' + String(x.total).padStart(4, ' ') + '  ' + x.rotulo +
+        '   (' + x.cruz + ' / ' + x.ocor + ')';
+    }).join('\n'),
+    '',
+    'JÁ TÊM DONO:',
+    comDono.sort(function (a, b) { return b.total - a.total; }).map(function (x) {
+      return '   ' + String(x.total).padStart(4, ' ') + '  ' + x.rotulo + '  ->  ' + x.responsavel;
+    }).join('\n'),
+    '',
+    'NO CADASTRO MAS SEM NENHUM DADO (suspeito de nome divergente):',
+    semDado.length
+      ? semDado.map(function (x) { return '   ' + x.area + '  ->  ' + x.responsavel; }).join('\n')
+      : '   (nenhuma)'
+  ].join('\n');
+
+  Logger.log(texto);
+  return texto;
+}
+
+/* ============================================================================
+ * PRUDÊNCIO — assistente do portal
+ * ============================================================================
+ * ARQUITETURA, e a razão dela: o Prudêncio NÃO lê planilha. Ele chama as MESMAS
+ * funções que desenham os cards, e responde com os números que elas devolvem.
+ *
+ * A alternativa óbvia — jogar as planilhas no modelo — falharia por dois
+ * motivos. A TAG SAF tem ~70 mil linhas e não cabe em contexto. E, pior, o
+ * modelo reinventaria as regras de negócio: a regra v5 do registrável
+ * brasileiro, a canonicalização de áreas com apelidos e prefixos, o parser de
+ * datas em texto. Ele diria um número, o card diria outro, e ninguém confiaria
+ * em nenhum dos dois. Passando pelas funções, chat e tela não têm COMO divergir.
+ *
+ * Efeito colateral bom: essas funções são cacheadas. Pergunta que cai em cache
+ * quente não toca planilha nenhuma.
+ *
+ * A CHAVE fica em PropertiesService, nunca no código — o Code.js vai para o
+ * clasp e já esteve num repositório. Configurar:
+ *     Extensões > Apps Script > Configurações do projeto > Propriedades do script
+ *     ANTHROPIC_API_KEY = sk-ant-...
+ * ============================================================================ */
+var PRUDENCIO_MODELO_ = 'claude-opus-5';
+var PRUDENCIO_MAX_TOKENS_ = 4000;
+// Teto de idas ao modelo por pergunta. O Apps Script corta a execução em 6 min,
+// e sem teto uma pergunta ambígua pode encadear ferramentas até estourar.
+var PRUDENCIO_MAX_RODADAS_ = 4;
+var PRUDENCIO_MAX_HISTORICO_ = 12;
+
+/**
+ * As ferramentas do Prudêncio. Cada uma é uma função que o portal JÁ usa —
+ * nenhuma leitura nova de planilha foi criada para o chat.
+ *
+ * `rotulo` é o nome do card, para a resposta poder dizer de onde veio o número.
+ * `executar` recebe o input do modelo e devolve o objeto que vira tool_result.
+ */
+function prudencioFerramentas_() {
+  return [
+    {
+      nome: 'ocorrencias_por_area',
+      rotulo: 'Ocorrências por área',
+      descricao: 'Ocorrências de segurança de um ANO, agrupadas por área e por tipo ' +
+        '(com afastamento, sem afastamento, primeiros socorros, quase acidente, ' +
+        'princípio de incêndio). Use para "qual área tem mais ocorrências", ' +
+        '"quantos acidentes em X" e comparações entre áreas.',
+      schema: {
+        type: 'object',
+        properties: {
+          ano: { type: 'number', description: 'Ano de 4 dígitos. Omita para o ano mais recente.' }
+        }
+      },
+      executar: function (input) {
+        var ano = Number(input && input.ano) || getAnosDisponiveis()[0];
+        var pacote = getCruzAnoCompleto(ano);
+        var totais = pacote.totaisPorDepartamentoMes || {};
+        var porArea = [];
+
+        Object.keys(totais).forEach(function (area) {
+          if (area === 'Todas') return;
+          var soma = { comAfastamento: 0, semAfastamento: 0, primeirosSocorros: 0, quaseAcidente: 0, incendio: 0 };
+          Object.keys(totais[area]).forEach(function (mes) {
+            var t = totais[area][mes] || {};
+            soma.comAfastamento += t.vermelho || 0;
+            soma.semAfastamento += t.laranja || 0;
+            soma.primeirosSocorros += t.amarelo || 0;
+            soma.quaseAcidente += t.azul || 0;
+            soma.incendio += t.cinza || 0;
+          });
+          soma.area = area;
+          soma.total = soma.comAfastamento + soma.semAfastamento + soma.primeirosSocorros +
+            soma.quaseAcidente + soma.incendio;
+          if (soma.total > 0) porArea.push(soma);
+        });
+
+        porArea.sort(function (a, b) { return b.total - a.total; });
+        return { ano: ano, areas: porArea, totalAreas: porArea.length };
+      }
+    },
+    {
+      nome: 'taxas_e_metas',
+      rotulo: 'Taxa TRIR / Taxa FAI',
+      descricao: 'Taxas TRIR (registráveis) e FAI (primeiros socorros) por 200.000 horas, ' +
+        'mês a mês, com meta e OL. Use para "como está a taxa", "estamos dentro da meta".',
+      schema: {
+        type: 'object',
+        properties: {
+          ano: { type: 'number', description: 'Ano de 4 dígitos. Omita para o ano mais recente.' }
+        }
+      },
+      executar: function (input) {
+        var ano = Number(input && input.ano) || getAnosDisponiveis()[0];
+        var home = getResumoHome(ano);
+        return {
+          ano: ano,
+          metas: home.metas,
+          ol: home.ol,
+          ytd: home.ytd,
+          mesesPublicados: (home.oficial && home.oficial.firstAid) || null,
+          trrPublicado: (home.oficial && home.oficial.trr) || null
+        };
+      }
+    },
+    {
+      nome: 'acoes_ats',
+      rotulo: 'ATS — ações por responsável',
+      descricao: 'Ações do ATS em aberto e vencidas, por responsável, gerente e área. ' +
+        'Use para "quantas ações estão atrasadas", "quem tem mais pendências".',
+      schema: { type: 'object', properties: {} },
+      executar: function () {
+        // Nomes conferidos contra o retorno real de getAtsAbertos: `total`,
+        // `aberto` e `vencido` — não "totalAbertas"/"totalVencidas". Campo
+        // inexistente viraria `undefined` no JSON e o Prudêncio responderia
+        // com um buraco sem saber que era um buraco.
+        var d = getAtsAbertos(false);
+        return {
+          total: d.total, aberto: d.aberto, vencido: d.vencido,
+          porResponsavel: (d.porResponsavel || []).slice(0, 15),
+          porGerente: (d.porGerente || []).slice(0, 10),
+          porArea: (d.porArea || []).slice(0, 10),
+          topAtrasos: (d.topAtrasos || []).slice(0, 5),
+          semResponsavel: d.semResponsavel,
+          erro: d.erro || null
+        };
+      }
+    },
+    {
+      nome: 'ocorrencias_por_ano',
+      rotulo: 'Ocorrências por ano — FAI × Recordable',
+      descricao: 'Série histórica por ANO de primeiros socorros e registráveis ' +
+        '(com e sem afastamento). Use para tendência, comparação entre anos, ' +
+        '"estamos melhor que ano passado".',
+      schema: { type: 'object', properties: {} },
+      executar: function () {
+        var d = getParetoFaiRec(false);
+        return {
+          anos: d.anos, total: d.total, periodo: d.periodo,
+          totalComAfastamento: d.totalComAfastamento,
+          totalSemAfastamento: d.totalSemAfastamento,
+          totalFai: d.totalFai
+        };
+      }
+    }
+  ];
+}
+
+/* ----------------------------------------------------------------------------
+ * MODO SEM IA — o Prudêncio de regras
+ *
+ * Enquanto não há chave de API, o chat NÃO fica inútil: ele responde por
+ * palavras-chave, chamando as MESMAS ferramentas. Os números são reais; o que
+ * falta é a interpretação de linguagem livre.
+ *
+ * Isso não é um remendo temporário — quando a API entrar, este motor vira a
+ * camada de fallback: pergunta que o modelo não puder atender (chave vencida,
+ * cota estourada, API fora do ar) ainda é respondida aqui.
+ * -------------------------------------------------------------------------- */
+
+/** Primeiro nome de quem está logado, para o Prudêncio falar com a pessoa. */
+function prudencioNomeUsuario_() {
+  try {
+    var d = obterDadosIniciais();
+    return (d && d.nome) || 'Guardião';
+  } catch (e) {
+    return 'Guardião';
+  }
+}
+
+/**
+ * Saudação da planta, com o mantra que o time usa. A parte do dia sai do fuso
+ * do SCRIPT, não do navegador: relógio de máquina pessoal desregulado daria
+ * "boa noite" às três da tarde.
+ */
+function prudencioSaudacao_(nome) {
+  var hora = Number(Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'H'));
+  // As duas faixas são FECHADAS dos dois lados de propósito. Com `hora < 18`
+  // solto no meio, a madrugada (0h-4h) caía em "Boa tarde" — e esta planta tem
+  // 3º turno, então tem gente lendo isso às três da manhã.
+  var parte = (hora >= 5 && hora < 12) ? 'Bom dia'
+    : (hora >= 12 && hora < 18) ? 'Boa tarde' : 'Boa noite';
+  return parte + ' com respeito e segurança, ' + nome + '!';
+}
+
+/** minúsculas, sem acento, sem pontuação — para casar palavra-chave. */
+function prudencioNormalizar_(texto) {
+  return normalizarTexto_(texto).replace(/[^a-z0-9\s]+/g, ' ').replace(/\s+/g, ' ').trim();
+}
+
+function prudencioFormatarNumero_(n) {
+  return (Math.round(Number(n) || 0)).toLocaleString('pt-BR');
+}
+
+function prudencioFormatarTaxa_(v) {
+  if (v === null || v === undefined || isNaN(v)) return '—';
+  return Number(v).toFixed(3).replace('.', ',');
+}
+
+/**
+ * As intenções que o Prudêncio entende sem IA.
+ *
+ * `termos` são gatilhos: basta UM aparecer na pergunta. Ordem importa pouco —
+ * quem decide é a PONTUAÇÃO (quantos termos bateram), então uma pergunta que
+ * mistura assuntos cai na intenção com mais sinais.
+ *
+ * `responder` devolve { texto, fontes } e pode chamar qualquer agregado do
+ * portal. Se lançar, prudencioResponderSemIa_ transforma em mensagem amigável.
+ */
+function prudencioIntencoes_() {
+  return [
+    {
+      nome: 'saudacao',
+      termos: ['bom dia', 'boa tarde', 'boa noite', 'ola', 'oi', 'eai', 'e ai', 'tudo bem', 'opa'],
+      responder: function (ctx) {
+        return {
+          texto: prudencioSaudacao_(ctx.nome) + '\n\n' +
+            'Posso trazer os números dos indicadores deste portal. Experimente perguntar ' +
+            '"qual área tem mais ocorrências" ou "como está a taxa TRIR".'
+        };
+      }
+    },
+    {
+      nome: 'quem_e_voce',
+      termos: ['quem e voce', 'quem es voce', 'seu nome', 'o que voce faz', 'como funciona',
+               'o que voce sabe', 'pode me ajudar', 'ajuda', 'help', 'o que perguntar'],
+      responder: function (ctx) {
+        return {
+          texto: 'Sou o Prudêncio, ' + ctx.nome + ' — a Cruz Verde que cuida deste portal.\n\n' +
+            'Hoje eu respondo sobre:\n' +
+            '• **Ocorrências por área** — quem lidera, quantas por tipo\n' +
+            '• **Taxas TRIR e FAI** — realizado, meta e OL\n' +
+            '• **ATS** — ações abertas e vencidas, por responsável\n' +
+            '• **Histórico por ano** — a tendência de acidentes\n' +
+            '• **Partes do corpo** — o que mais se machuca\n' +
+            '• **Quase acidentes** — volume e classificação A/B/C\n\n' +
+            'É só perguntar com essas palavras que eu busco o número.'
+        };
+      }
+    },
+    {
+      nome: 'ocorrencias_por_area',
+      termos: ['area', 'areas', 'setor', 'onde', 'local', 'qual area', 'lidera', 'pior area'],
+      responder: function (ctx) {
+        var d = ctx.ferramenta('ocorrencias_por_area', {});
+        if (!d.areas.length) return { texto: 'Não encontrei ocorrências registradas em ' + d.ano + '.' };
+
+        var top = d.areas.slice(0, 3);
+        var linhas = top.map(function (a, i) {
+          return (i + 1) + '. **' + a.area + '** — ' + a.total + ' no total ' +
+            '(' + a.primeirosSocorros + ' primeiros socorros, ' +
+            (a.comAfastamento + a.semAfastamento) + ' registráveis)';
+        });
+
+        return {
+          texto: 'Em ' + d.ano + ', as áreas com mais ocorrências são:\n\n' + linhas.join('\n') +
+            '\n\nAo todo são ' + d.totalAreas + ' áreas com registro no ano.',
+          fontes: ['Ocorrências por área']
+        };
+      }
+    },
+    {
+      nome: 'taxas',
+      termos: ['taxa', 'trir', 'fai', 'meta', 'ol', 'indicador', 'estamos dentro', 'acima da meta'],
+      responder: function (ctx) {
+        var d = ctx.ferramenta('taxas_e_metas', {});
+        var metas = d.metas || {};
+        var ol = d.ol || {};
+        var ytd = d.ytd || {};
+
+        var partes = ['Em ' + d.ano + ', até agora:', ''];
+        partes.push('**TRIR** (registráveis): ' + prudencioFormatarTaxa_(ytd.taxaRec) +
+          ' · meta ' + prudencioFormatarTaxa_(metas.taxaRec) +
+          (ol.taxaRec ? ' · OL ' + prudencioFormatarTaxa_(ol.taxaRec) : ''));
+        partes.push('**FAI** (primeiros socorros): ' + prudencioFormatarTaxa_(ytd.taxaFai) +
+          ' · meta ' + prudencioFormatarTaxa_(metas.taxaFai) +
+          (ol.taxaFai ? ' · OL ' + prudencioFormatarTaxa_(ol.taxaFai) : ''));
+
+        // Taxa MENOR é melhor: dizer "acima da meta" sem essa explicação
+        // inverteria a leitura para quem não convive com o indicador.
+        if (ytd.taxaRec !== null && ytd.taxaRec !== undefined && metas.taxaRec) {
+          partes.push('');
+          partes.push(ytd.taxaRec <= metas.taxaRec
+            ? 'A TRIR está **dentro** da meta (quanto menor, melhor).'
+            : 'A TRIR está **acima** da meta — e aqui menor é melhor.');
+        }
+        partes.push('');
+        partes.push('O acumulado do ano é ' + prudencioFormatarNumero_(ytd.rec) + ' registráveis e ' +
+          prudencioFormatarNumero_(ytd.fai) + ' primeiros socorros.');
+
+        return { texto: partes.join('\n'), fontes: ['Taxa TRIR / Taxa FAI'] };
+      }
+    },
+    {
+      nome: 'ats',
+      termos: ['ats', 'acao', 'acoes', 'pendencia', 'pendencias', 'vencida', 'vencidas',
+               'atrasada', 'atrasadas', 'prazo', 'responsavel', 'tratativa'],
+      responder: function (ctx) {
+        var d = ctx.ferramenta('acoes_ats', {});
+        if (d.erro) return { texto: 'Não consegui ler o ATS agora: ' + d.erro };
+
+        var partes = ['No ATS hoje: **' + prudencioFormatarNumero_(d.total) + '** ações na fila — ' +
+          prudencioFormatarNumero_(d.aberto) + ' abertas e **' +
+          prudencioFormatarNumero_(d.vencido) + '** vencidas.'];
+
+        var top = (d.porResponsavel || []).slice(0, 3);
+        if (top.length) {
+          partes.push('');
+          partes.push('Quem concentra a fila:');
+          top.forEach(function (r, i) {
+            partes.push((i + 1) + '. **' + r.nome + '** — ' + r.total +
+              ' (' + r.vencido + ' vencida' + (r.vencido === 1 ? '' : 's') + ')');
+          });
+        }
+        return { texto: partes.join('\n'), fontes: ['ATS — ações por responsável'] };
+      }
+    },
+    {
+      nome: 'historico_ano',
+      termos: ['ano', 'anos', 'historico', 'tendencia', 'evolucao', 'comparado', 'ano passado',
+               'melhorou', 'piorou', 'aumentou', 'diminuiu'],
+      responder: function (ctx) {
+        var d = ctx.ferramenta('ocorrencias_por_ano', {});
+        var anos = d.anos || [];
+        if (!anos.length) return { texto: 'Não tenho série histórica disponível agora.' };
+
+        var ultimo = anos[anos.length - 1];
+        var anterior = anos.length > 1 ? anos[anos.length - 2] : null;
+
+        var partes = ['Em **' + ultimo.ano + '**: ' + ultimo.fai + ' primeiros socorros e ' +
+          ultimo.recordable + ' registráveis.'];
+
+        if (anterior) {
+          var difFai = ultimo.fai - anterior.fai;
+          partes.push('Em ' + anterior.ano + ' foram ' + anterior.fai + ' e ' + anterior.recordable + '.');
+          partes.push('');
+          partes.push(difFai === 0
+            ? 'Os primeiros socorros estão no mesmo patamar do ano anterior.'
+            : 'Os primeiros socorros ' + (difFai < 0 ? '**caíram** ' : '**subiram** ') +
+              Math.abs(difFai) + ' em relação a ' + anterior.ano + '.');
+          // O ano corrente é parcial — comparar com um ano fechado sem dizer
+          // isso faz qualquer queda parecer conquista.
+          if (ultimo.ano === new Date().getFullYear()) {
+            partes.push('Lembrando que ' + ultimo.ano + ' ainda está em andamento.');
+          }
+        }
+        return { texto: partes.join('\n'), fontes: ['Ocorrências por ano — FAI × Recordable'] };
+      }
+    },
+    {
+      nome: 'partes_corpo',
+      termos: ['corpo', 'parte', 'partes', 'mao', 'maos', 'dedo', 'dedos', 'olho', 'olhos',
+               'lesao', 'lesoes', 'machuca', 'boneco'],
+      responder: function (ctx) {
+        var ano = getAnosDisponiveis()[0];
+        var pacote = getPartesDoCorpoAnoCompleto(ano);
+        var porMes = (pacote.porAreaMes || {})['Todas'] || {};
+        var soma = {};
+
+        Object.keys(porMes).forEach(function (mes) {
+          var b = porMes[mes] || {};
+          ['comAfastamento', 'semAfastamento', 'primeirosSocorros'].forEach(function (cat) {
+            Object.keys(b[cat] || {}).forEach(function (regiao) {
+              soma[regiao] = (soma[regiao] || 0) + b[cat][regiao];
+            });
+          });
+        });
+
+        var lista = Object.keys(soma).map(function (r) { return { regiao: r, total: soma[r] }; })
+          .filter(function (x) { return x.total > 0; })
+          .sort(function (a, b) { return b.total - a.total; })
+          .slice(0, 4);
+
+        if (!lista.length) return { texto: 'Não encontrei lesões registradas em ' + ano + '.' };
+
+        var nomes = { mao: 'mão', pe: 'pé', cabeca: 'cabeça', olho: 'olho', braco: 'braço',
+          perna: 'perna', costas: 'costas', joelho: 'joelho', ombro: 'ombro', punho: 'punho',
+          tornozelo: 'tornozelo', cotovelo: 'cotovelo', antebraco: 'antebraço', coxa: 'coxa',
+          torax: 'tórax', abdomen: 'abdômen', quadril: 'quadril', pescoco: 'pescoço', outro: 'outros' };
+
+        return {
+          texto: 'Em ' + ano + ', as partes do corpo mais atingidas:\n\n' +
+            lista.map(function (x, i) {
+              return (i + 1) + '. **' + (nomes[x.regiao] || x.regiao) + '** — ' + x.total;
+            }).join('\n'),
+          fontes: ['Boneco — Partes do Corpo']
+        };
+      }
+    },
+    {
+      nome: 'quase_acidente',
+      termos: ['quase acidente', 'quase acidentes', 'near miss', 'nm', 'piramide'],
+      responder: function (ctx) {
+        var d = ctx.ferramenta('ocorrencias_por_area', {});
+        var total = d.areas.reduce(function (a, x) { return a + x.quaseAcidente; }, 0);
+        var top = d.areas.slice().sort(function (a, b) { return b.quaseAcidente - a.quaseAcidente; })
+          .filter(function (x) { return x.quaseAcidente > 0; }).slice(0, 3);
+
+        if (!total) return { texto: 'Não há quase acidentes registrados em ' + d.ano + '.' };
+
+        return {
+          texto: 'Em ' + d.ano + ' foram **' + prudencioFormatarNumero_(total) + '** quase acidentes.\n\n' +
+            'Onde mais aparecem:\n' +
+            top.map(function (a, i) { return (i + 1) + '. **' + a.area + '** — ' + a.quaseAcidente; }).join('\n') +
+            '\n\nQuase acidente é o degrau da pirâmide onde dá para agir antes de alguém se machucar.',
+          fontes: ['Ocorrências por área']
+        };
+      }
+    },
+    {
+      nome: 'agradecimento',
+      termos: ['obrigado', 'obrigada', 'valeu', 'show', 'legal', 'otimo', 'perfeito', 'tchau', 'ate mais'],
+      responder: function (ctx) {
+        return {
+          texto: 'Por nada, ' + ctx.nome + '! Vai com segurança — e volte sempre que precisar de um número.'
+        };
+      }
+    }
+  ];
+}
+
+/**
+ * Responde por palavras-chave. É o caminho usado enquanto não há chave de API.
+ *
+ * Quando não reconhece, NÃO devolve um "não entendi" seco: mostra o que sabe
+ * fazer, com exemplos prontos. Um assistente que só nega ensina a pessoa a
+ * parar de perguntar.
+ */
+function prudencioResponderSemIa_(pergunta, nome) {
+  var texto = prudencioNormalizar_(pergunta);
+
+  var porNome = {};
+  prudencioFerramentas_().forEach(function (f) { porNome[f.nome] = f; });
+
+  var contexto = {
+    nome: nome,
+    ferramenta: function (chave, input) {
+      var f = porNome[chave];
+      if (!f) throw new Error('Ferramenta indisponível: ' + chave);
+      return f.executar(input || {});
+    }
+  };
+
+  // Pontuação = quantos gatilhos apareceram. Empate fica com a primeira, e a
+  // ordem das intenções coloca as específicas antes das genéricas.
+  //
+  // PALAVRA INTEIRA, não pedaço de palavra. Com `indexOf` puro, o gatilho 'ol'
+  // (do OL das taxas) casava dentro de "protoc**ol**o", "contr**ol**e" e
+  // "s**ol**ução" — e "qual o protocolo?" respondia sobre taxa TRIR. Cercar o
+  // texto e o termo com espaços resolve, e continua funcionando para gatilhos
+  // de várias palavras ("estamos dentro").
+  // Gatilho de VÁRIAS palavras pesa mais: "quase acidentes" é um sinal muito
+  // mais forte que "ano". Sem isso, "quantos quase acidentes tivemos este ano?"
+  // empatava 1 a 1 com a intenção de histórico e caía na errada, porque o
+  // desempate era a ordem da lista.
+  var cercado = ' ' + texto + ' ';
+  var melhor = null;
+  var melhorPonto = 0;
+  prudencioIntencoes_().forEach(function (intencao) {
+    var pontos = 0;
+    intencao.termos.forEach(function (termo) {
+      if (cercado.indexOf(' ' + termo + ' ') !== -1) pontos += termo.split(' ').length;
+    });
+    if (pontos > melhorPonto) { melhor = intencao; melhorPonto = pontos; }
+  });
+
+  if (!melhor) {
+    return {
+      texto: 'Ainda não sei responder isso, ' + nome + ' — por enquanto eu leio os ' +
+        'indicadores do portal, não texto livre.\n\n' +
+        'O que eu sei responder agora:\n' +
+        '• "qual **área** tem mais ocorrências"\n' +
+        '• "como está a **taxa** TRIR"\n' +
+        '• "quantas **ações** do ATS estão vencidas"\n' +
+        '• "qual a **tendência** por ano"\n' +
+        '• "quais **partes do corpo** mais se machucam"\n' +
+        '• "quantos **quase acidentes** tivemos"\n\n' +
+        'Tente uma dessas — ou use uma dessas palavras na sua pergunta.',
+      semResposta: true
+    };
+  }
+
+  try {
+    var r = melhor.responder(contexto) || {};
+    return { texto: r.texto || '', fontes: r.fontes || [], intencao: melhor.nome };
+  } catch (e) {
+    // Falha de dado não pode virar tela de erro: o Prudêncio diz o que houve e
+    // continua útil.
+    return {
+      texto: 'Consegui entender a pergunta, mas não consegui buscar o número agora.\n\n' +
+        'Motivo: ' + String(e && e.message ? e.message : e) + '\n\n' +
+        'Tente de novo em instantes — pode ser a planilha demorando a responder.',
+      intencao: melhor.nome
+    };
+  }
+}
+
+/* ===================================================================
+   REGISTRO DE PERGUNTAS — a matéria-prima para ampliar a biblioteca.
+
+   O motor de regras responde por PALAVRA-CHAVE. Toda pergunta que não casa com
+   nenhuma intenção é um gatilho que falta, e sem registrar isso a informação se
+   perde no instante em que a pessoa fecha o chat. Aqui ela vira linha de
+   planilha, e a lista ordenada por frequência diz onde investir primeiro.
+
+   POR PADRÃO REGISTRA SÓ O QUE FICOU SEM RESPOSTA (`PERGUNTAS_SO_SEM_RESPOSTA_`),
+   e essa escolha é de desempenho, não de escopo: gravar exige abrir a planilha,
+   o que custa ~1s. No caminho feliz o chat responde em ~1,2s e dobrar isso para
+   coletar estatística seria pagar caro na cara de quem usa. Quem quiser o
+   histórico completo (inclusive das respondidas, para ver quais intenções
+   pegam) muda a constante para false — a estrutura já suporta.
+
+   LIMITAÇÃO CONHECIDA, importante quando a chave da API entrar: no modo IA o
+   modelo responde texto livre e NUNCA marca `semResposta`, então nada será
+   registrado. Detectar "o modelo não soube" de forma confiável não dá pelo
+   texto. Quando chegarmos lá, o caminho é justamente ligar o modo completo.
+
+   PRIVACIDADE: grava o e-mail de quem perguntou, para dar para voltar na pessoa
+   e entender o que ela queria. É ferramenta interna e o portal já identifica o
+   usuário na saudação — mas é uma escolha, e desligar é apagar uma coluna.
+   =================================================================== */
+var PERGUNTAS_SPREADSHEET_ID_ = '1ldG92kOwb_pdq64iAIIuT92efxPzjLywMes_kLjstP0';
+var PERGUNTAS_ABA_ = 'perguntas';
+var PERGUNTAS_SO_SEM_RESPOSTA_ = true;   // false = registra TODAS (custa ~1s por pergunta)
+var PERGUNTAS_MAX_TEXTO_ = 500;          // texto livre não pode inchar a planilha
+var PERGUNTAS_CABECALHOS_ = [
+  'Data/Hora', 'Usuário', 'Pergunta', 'Situação', 'Intenção', 'Modo', 'Resposta (início)'
+];
+
+/**
+ * Grava uma pergunta. NUNCA lança e NUNCA altera a resposta — registrar é
+ * efeito colateral, e um problema na planilha de log não pode tirar do ar o
+ * chat que estava funcionando.
+ */
+function registrarPerguntaPrudencio_(pergunta, resposta) {
+  try {
+    var texto = String(pergunta || '').trim();
+    if (!texto) return;
+
+    var r = resposta || {};
+    var situacao = r.erro ? 'erro' : (r.semResposta ? 'sem resposta' : 'respondida');
+    if (PERGUNTAS_SO_SEM_RESPOSTA_ && situacao === 'respondida') return;
+
+    var planilha = SpreadsheetApp.openById(PERGUNTAS_SPREADSHEET_ID_);
+    var aba = localizarAbaTolerante_(planilha, PERGUNTAS_ABA_);
+
+    // Cria a aba se faltar, com cabeçalho: assim o registro funciona desde a
+    // primeira pergunta, sem preparo manual.
+    if (!aba) {
+      aba = planilha.insertSheet(PERGUNTAS_ABA_);
+      aba.appendRow(PERGUNTAS_CABECALHOS_);
+      aba.getRange(1, 1, 1, PERGUNTAS_CABECALHOS_.length)
+        .setFontWeight('bold').setBackground('#0d436b').setFontColor('#ffffff');
+      aba.setFrozenRows(1);
+    }
+
+    aba.appendRow([
+      new Date(),
+      prudencioEmailUsuario_(),
+      texto.slice(0, PERGUNTAS_MAX_TEXTO_),
+      situacao,
+      r.intencao || '',
+      r.modo || (r.erro ? '' : 'ia'),
+      String(r.erro || r.texto || '').slice(0, 200)
+    ]);
+  } catch (e) {
+    // De propósito silencioso para o usuário; visível para quem investiga.
+    try { Logger.log('registrarPerguntaPrudencio_ falhou: ' + e.message); } catch (e2) { /* nada */ }
+  }
+}
+
+/** E-mail de quem perguntou, ou '' — nunca lança. */
+function prudencioEmailUsuario_() {
+  try {
+    return Session.getActiveUser().getEmail() || '';
+  } catch (e) {
+    return '';
+  }
+}
+
+/**
+ * Diagnóstico: mostra o estado do registro e as últimas perguntas gravadas.
+ * Rodar depois de fazer algumas perguntas no portal.
+ */
+function debugPerguntas() {
+  var linhas = ['REGISTRO DE PERGUNTAS — ' + PERGUNTAS_SPREADSHEET_ID_,
+    '  modo: ' + (PERGUNTAS_SO_SEM_RESPOSTA_ ? 'SÓ as sem resposta' : 'TODAS as perguntas')];
+
+  try {
+    var planilha = SpreadsheetApp.openById(PERGUNTAS_SPREADSHEET_ID_);
+    var aba = localizarAbaTolerante_(planilha, PERGUNTAS_ABA_);
+    if (!aba) {
+      linhas.push('  a aba "' + PERGUNTAS_ABA_ + '" ainda NÃO existe — será criada na 1ª gravação.');
+      linhas.push('  abas de hoje: ' + planilha.getSheets().map(function (s) { return s.getName(); }).join(', '));
+      return debugLogar_(linhas.join('\n'));
+    }
+
+    var ultima = aba.getLastRow();
+    linhas.push('  aba "' + aba.getName() + '": ' + Math.max(0, ultima - 1) + ' pergunta(s) registrada(s).');
+    if (ultima < 2) {
+      linhas.push('  Nenhuma ainda. Faça uma pergunta que o Prudêncio NÃO saiba responder e rode de novo.');
+      return debugLogar_(linhas.join('\n'));
+    }
+
+    // As 15 mais recentes, e a contagem por texto — é a contagem que diz qual
+    // gatilho vale a pena criar primeiro.
+    var inicio = Math.max(2, ultima - 14);
+    var dados = aba.getRange(inicio, 1, ultima - inicio + 1, PERGUNTAS_CABECALHOS_.length).getValues();
+    linhas.push('');
+    linhas.push('  ÚLTIMAS ' + dados.length + ':');
+    dados.reverse().forEach(function (l) {
+      linhas.push('    [' + l[3] + '] "' + String(l[2]).slice(0, 80) + '"   ' +
+        (l[4] ? '(intenção: ' + l[4] + ')' : '') + '  ' + l[1]);
+    });
+
+    var todas = aba.getRange(2, 3, ultima - 1, 2).getValues();
+    var freq = {};
+    todas.forEach(function (l) {
+      if (String(l[1]) !== 'sem resposta') return;
+      var k = normalizarChaveTexto_(l[0]);
+      if (k) freq[k] = (freq[k] || 0) + 1;
+    });
+    var ordenadas = Object.keys(freq).sort(function (a, b) { return freq[b] - freq[a]; });
+    if (ordenadas.length) {
+      linhas.push('');
+      linhas.push('  SEM RESPOSTA, por frequência (é por aqui que se amplia a biblioteca):');
+      ordenadas.slice(0, 20).forEach(function (k, i) {
+        linhas.push('    ' + (i + 1) + '. ' + freq[k] + 'x  "' + k + '"');
+      });
+    }
+  } catch (e) {
+    linhas.push('  ERRO: ' + e.message);
+  }
+
+  return debugLogar_(linhas.join('\n'));
+}
+
+/**
+ * Endpoint do chat. NUNCA lança: erro vira `{erro}` e o painel mostra a
+ * mensagem — uma exceção aqui deixaria o chat mudo.
+ *
+ * SEM CHAVE DE API o chat NÃO fica inútil: cai no motor de regras
+ * (prudencioResponderSemIa_), que responde com os mesmos números dos cards.
+ * Com a chave, o modelo assume e o motor de regras vira o fallback.
+ *
+ * Casca fina em volta de prudencioPerguntarInterno_: o registro precisa de UM
+ * ponto de saída, e a função interna tem vários returns.
+ *
+ * @param {string} pergunta
+ * @param {Array} historico [{papel:'user'|'assistant', texto}], os últimos turnos
+ */
+function prudencioPerguntar(pergunta, historico) {
+  var resposta = prudencioPerguntarInterno_(pergunta, historico);
+  registrarPerguntaPrudencio_(pergunta, resposta);
+  return resposta;
+}
+
+function prudencioPerguntarInterno_(pergunta, historico) {
+  try {
+    var nome = prudencioNomeUsuario_();
+    var chave = PropertiesService.getScriptProperties().getProperty('ANTHROPIC_API_KEY');
+    if (!chave) {
+      var semIa = prudencioResponderSemIa_(pergunta, nome);
+      semIa.modo = 'regras';
+      return semIa;
+    }
+
+    var texto = String(pergunta || '').trim();
+    if (!texto) return { erro: 'Faça uma pergunta.' };
+
+    var ferramentas = prudencioFerramentas_();
+    var porNome = {};
+    ferramentas.forEach(function (f) { porNome[f.nome] = f; });
+
+    var mensagens = prudencioMontarHistorico_(historico);
+    mensagens.push({ role: 'user', content: texto });
+
+    var fontes = {};
+    var resposta = null;
+
+    for (var rodada = 0; rodada < PRUDENCIO_MAX_RODADAS_; rodada++) {
+      resposta = prudencioChamarApi_(chave, mensagens, ferramentas);
+      if (resposta.erro) {
+        // API fora do ar, cota estourada, chave vencida: NÃO mostra erro cru.
+        // Cai no motor de regras, que responde com os mesmos números — para o
+        // usuário, o chat continua funcionando, só menos esperto.
+        var reserva = prudencioResponderSemIa_(texto, nome);
+        reserva.modo = 'regras';
+        reserva.aviso = 'Respondi pelo modo básico — a IA está indisponível no momento.';
+        return reserva;
+      }
+
+      if (resposta.stop_reason !== 'tool_use') break;
+
+      // O turno do assistente volta INTEIRO para a conversa: tirar os blocos de
+      // tool_use faria o modelo perder o próprio pedido e repetir a chamada.
+      mensagens.push({ role: 'assistant', content: resposta.content });
+
+      var resultados = [];
+      resposta.content.forEach(function (bloco) {
+        if (bloco.type !== 'tool_use') return;
+        var ferramenta = porNome[bloco.name];
+        var conteudo;
+        if (!ferramenta) {
+          conteudo = JSON.stringify({ erro: 'Ferramenta desconhecida: ' + bloco.name });
+        } else {
+          try {
+            conteudo = JSON.stringify(ferramenta.executar(bloco.input || {}));
+            fontes[ferramenta.rotulo] = true;
+          } catch (e) {
+            // Erro de ferramenta volta como resultado, não derruba a conversa:
+            // o modelo consegue dizer "não consegui obter X" com isso.
+            conteudo = JSON.stringify({ erro: String(e && e.message ? e.message : e) });
+          }
+        }
+        resultados.push({ type: 'tool_result', tool_use_id: bloco.id, content: conteudo });
+      });
+
+      // TODOS os tool_result numa ÚNICA mensagem de usuário — separá-los em
+      // mensagens distintas quebra o protocolo de chamadas paralelas.
+      mensagens.push({ role: 'user', content: resultados });
+    }
+
+    return {
+      texto: prudencioExtrairTexto_(resposta),
+      fontes: Object.keys(fontes)
+    };
+  } catch (e) {
+    return { erro: 'Falha no Prudêncio: ' + String(e && e.message ? e.message : e) };
+  }
+}
+
+/**
+ * Saudação de abertura do painel. Endpoint próprio porque a PARTE DO DIA tem
+ * de sair do fuso do servidor: o relógio da máquina de quem acessa pode estar
+ * errado, e "boa noite" às três da tarde queima a saudação logo na primeira
+ * frase. Não lê planilha — é barata.
+ */
+function prudencioSaudacaoInicial() {
+  try {
+    var nome = prudencioNomeUsuario_();
+    return {
+      nome: nome,
+      texto: prudencioSaudacao_(nome) + '\n\n' +
+        'Sou o Prudêncio e cuido dos números deste portal. Posso falar de ocorrências ' +
+        'por área, taxas TRIR e FAI, ações do ATS, tendência por ano e partes do corpo.\n\n' +
+        'O que você quer saber?'
+    };
+  } catch (e) {
+    return { nome: 'Guardião', texto: 'Olá! Sou o Prudêncio. O que você quer saber sobre os indicadores?' };
+  }
+}
+
+/** Últimos turnos, em pares user/assistant, com teto. */
+function prudencioMontarHistorico_(historico) {
+  var lista = [];
+  (historico || []).slice(-PRUDENCIO_MAX_HISTORICO_).forEach(function (t) {
+    var papel = (t && t.papel === 'assistant') ? 'assistant' : 'user';
+    var conteudo = String((t && t.texto) || '').trim();
+    if (conteudo) lista.push({ role: papel, content: conteudo });
+  });
+  return lista;
+}
+
+function prudencioExtrairTexto_(resposta) {
+  if (!resposta || !resposta.content) return '';
+  return resposta.content
+    .filter(function (b) { return b.type === 'text'; })
+    .map(function (b) { return b.text; })
+    .join('\n')
+    .trim();
+}
+
+/**
+ * Uma chamada à Messages API. Apps Script não tem o SDK npm, então é HTTP puro
+ * via UrlFetchApp.
+ *
+ * `muteHttpExceptions` é obrigatório: sem ele o UrlFetchApp lança em qualquer
+ * status >= 400 e o corpo do erro — que é onde a API explica o que houve — se
+ * perde.
+ */
+function prudencioChamarApi_(chave, mensagens, ferramentas) {
+  var corpo = {
+    model: PRUDENCIO_MODELO_,
+    max_tokens: PRUDENCIO_MAX_TOKENS_,
+    system: prudencioInstrucoes_(),
+    messages: mensagens,
+    tools: ferramentas.map(function (f) {
+      return { name: f.nome, description: f.descricao, input_schema: f.schema };
+    })
+  };
+
+  var resposta = UrlFetchApp.fetch('https://api.anthropic.com/v1/messages', {
+    method: 'post',
+    contentType: 'application/json',
+    headers: { 'x-api-key': chave, 'anthropic-version': '2023-06-01' },
+    payload: JSON.stringify(corpo),
+    muteHttpExceptions: true
+  });
+
+  var codigo = resposta.getResponseCode();
+  var texto = resposta.getContentText();
+
+  if (codigo !== 200) {
+    var detalhe = texto;
+    try {
+      var json = JSON.parse(texto);
+      if (json && json.error && json.error.message) detalhe = json.error.message;
+    } catch (e) { /* corpo não-JSON: usa o texto cru */ }
+    return { erro: 'A API respondeu ' + codigo + ': ' + detalhe };
+  }
+
+  try {
+    return JSON.parse(texto);
+  } catch (e) {
+    return { erro: 'Resposta da API ilegível.' };
+  }
+}
+
+/**
+ * O system prompt. As três regras que mais importam:
+ *   - responder SÓ com o que as ferramentas devolvem (é o que impede número
+ *     inventado, que num portal de segurança é pior que não responder);
+ *   - admitir quando o dado não existe, em vez de improvisar;
+ *   - lembrar que TAG e ocorrência são universos diferentes — somá-los é o erro
+ *     que os cards do portal avisam para não cometer.
+ */
+function prudencioInstrucoes_() {
+  return [
+    'Você é o Prudêncio, assistente do portal EHS Tracker da planta de Rio Claro (Whirlpool).',
+    'Fala português do Brasil, de forma direta e objetiva, no tom de um colega da equipe de segurança.',
+    '',
+    'REGRAS:',
+    '1. Responda APENAS com números que vieram das ferramentas. Nunca estime, calcule por fora ou complete com conhecimento geral.',
+    '2. Se a pergunta pedir algo que as ferramentas não cobrem, diga claramente que não tem esse dado no portal. Não improvise.',
+    '3. Seja breve: 2 a 4 frases na maioria das perguntas. Use **negrito** só nos números que respondem a pergunta.',
+    '4. Ao citar uma área, use o nome exatamente como a ferramenta devolveu.',
+    '5. Apontamentos de TAG (observação preventiva) e ocorrências (acidentes) são universos DIFERENTES. Nunca some os dois.',
+    '6. Quando um número tiver ressalva conhecida — período parcial, área sem cadastro, dado que só cobre parte da base — diga isso em uma frase.',
+    '',
+    'CONTEXTO: TRIR são acidentes registráveis por 200.000 horas; FAI são primeiros socorros.',
+    'Registrável no Brasil é definido pela coluna "Locally Reportable?", não pelo critério OSHA americano.'
+  ].join('\n');
+}
+
+/**
+ * Testa a ligação com a API sem passar pelo chat. Rodar no editor depois de
+ * configurar a chave — separa "a chave está errada" de "o chat está com bug".
+ */
+function debugPrudencio() {
+  var r = prudencioPerguntar('Em duas frases: qual área teve mais ocorrências no ano mais recente?', []);
+  var texto = r.erro
+    ? 'ERRO: ' + r.erro
+    : 'RESPOSTA:\n' + r.texto + '\n\nFONTES: ' + (r.fontes || []).join(' · ');
+  Logger.log(texto);
+  return texto;
 }
 
 /**
@@ -1315,6 +3441,7 @@ function obterDadosHHT_(forcar) {
 
     var dados = aba.getRange(2, 1, ultimaLinha - 1, ultimaColuna).getValues();
     var fuso = aba.getParent().getSpreadsheetTimeZone();
+    var lerData = fabricarLeitorDeData_(fuso);
 
     dados.forEach(function (linha) {
       var data = linha[colData];
@@ -1323,8 +3450,9 @@ function obterDadosHHT_(forcar) {
       var horas = Number(linha[colHoras]);
       if (!horas || isNaN(horas)) return;
 
-      var ano = Number(Utilities.formatDate(data, fuso, 'yyyy'));
-      var mes = Number(Utilities.formatDate(data, fuso, 'M'));
+      var quando = lerData(data);
+      var ano = quando.ano;
+      var mes = quando.mes;
 
       if (!resultado.porAnoMes[ano]) resultado.porAnoMes[ano] = {};
       resultado.porAnoMes[ano][mes] = (resultado.porAnoMes[ano][mes] || 0) + horas;
@@ -1376,8 +3504,10 @@ function obterDadosHHT_(forcar) {
  * Cacheado por 6h, chave por ano.
  */
 var HHT_ACUMULADO_CACHE_CHAVE_ = 'hhtAcumuladoPlanta_v1_';
-var ACUMULADO_LINHA_TOTAL_ = 'rio claro';
-
+// DEPOIS — a aba muda de layout ano a ano: 2026 rotula a linha de total
+// "RIO CLARO"; 2025 usa uma aba "Gerente x mês" e chama a mesma linha de
+// "Total". Os dois entram como candidatos; o primeiro que bater vence.
+var ACUMULADO_LINHA_TOTAL_CANDIDATOS_ = ['rio claro', 'total'];
 /**
  * Acha a coluna cujo cabeçalho normalizado CONTÉM todos os tokens. Diferente de
  * acharColunaPorNome_, que exige igualdade — aqui os cabeçalhos são frases.
@@ -1483,17 +3613,25 @@ function obterAcumuladoPlanta_(ano, forcar) {
 
   var areas = [];
   var total = null;
-  for (var r = linhaCab + 1; r < valores.length; r++) {
-    var nome = String(valores[r][0] || '').trim();
-    if (!nome) continue;
-    var registro = linhaPara(valores[r]);
-    if (normalizarChaveTexto_(nome) === ACUMULADO_LINHA_TOTAL_) { total = registro; break; }
-    areas.push(registro);
-  }
+  // DEPOIS
+for (var r = linhaCab + 1; r < valores.length; r++) {
+  var nome = String(valores[r][0] || '').trim();
+  if (!nome) continue;
+  var registro = linhaPara(valores[r]);
+  var chaveLinha = normalizarChaveTexto_(nome);
+  var ehTotal = ACUMULADO_LINHA_TOTAL_CANDIDATOS_.some(function (c) {
+    return chaveLinha.indexOf(c) !== -1;
+  });
+  if (ehTotal) { total = registro; break; }
+  areas.push(registro);
+}
 
-  if (!total) {
-    throw new Error('Linha "RIO CLARO" não encontrada na aba "' + aba.getName() + '".');
-  }
+  // DEPOIS
+if (!total) {
+  throw new Error('Linha de total (' + ACUMULADO_LINHA_TOTAL_CANDIDATOS_.map(function (c) {
+    return '"' + c + '"';
+  }).join(' ou ') + ') não encontrada na aba "' + aba.getName() + '".');
+}
 
   var resultado = {
     ano: ano,
@@ -1509,6 +3647,104 @@ function obterAcumuladoPlanta_(ano, forcar) {
 
   cache.put(chave, JSON.stringify(resultado), CACHE_SEGUNDOS_6H_);
   return resultado;
+}
+
+/**
+ * METAS DA PLANTA — aba "Metas {ano}" da MESMA Base HHT do acumulado.
+ * Layout conferido em 2026-08-27: coluna A = "Macro Areas", linha RIO CLARO
+ * no fim. As colunas de meta são localizadas por TOKENS do cabeçalho, nunca
+ * por letra: há 3 colunas chamadas só "Taxa 2025" (índices 6, 9, 12), então a
+ * busca precisa de um trecho mais específico — "primeiros socorros"+"meta"
+ * para FAI, "trir"+"red" para REC.
+ *
+ * NUNCA lança: se a leitura falhar, os campos vêm null e o card mostra "Meta
+ * não encontrada" em vez de derrubar a home.
+ */
+var METAS_PLANTA_CACHE_CHAVE_ = 'metasPlanta_v1_';
+
+function localizarAbaMetas_(planilha, ano) {
+  var exata = localizarAbaTolerante_(planilha, 'Metas ' + ano);
+  if (exata) return exata;
+
+  var abas = planilha.getSheets();
+  for (var i = 0; i < abas.length; i++) {
+    var n = normalizarChaveTexto_(abas[i].getName());
+    if (n.indexOf('metas') !== -1 && n.indexOf(String(ano)) !== -1) return abas[i];
+  }
+  return null;
+}
+
+function obterMetasPlanta_(ano, forcar) {
+  var chave = METAS_PLANTA_CACHE_CHAVE_ + ano;
+  var cache = CacheService.getScriptCache();
+  if (!forcar) {
+    var cacheado = cache.get(chave);
+    if (cacheado) return JSON.parse(cacheado);
+  }
+
+  var resultado = { taxaFai: null, taxaRec: null, erro: null, aba: null, origemColunas: {} };
+
+  try {
+    var planilha = SpreadsheetApp.openById(HHT_SPREADSHEET_ID_);
+    var aba = localizarAbaMetas_(planilha, ano);
+    if (!aba) {
+      throw new Error('Aba "Metas ' + ano + '" não encontrada na Base HHT. Abas disponíveis: ' +
+        planilha.getSheets().map(function (a) { return a.getName(); }).join(' | '));
+    }
+    resultado.aba = aba.getName();
+
+    var cabecalhos = aba.getRange(1, 1, 1, aba.getLastColumn()).getValues()[0];
+    var colFai = acharColunaContendo_(cabecalhos, ['primeiros socorros', 'meta']);
+    var colRec = acharColunaContendo_(cabecalhos, ['trir', 'red']);
+    resultado.origemColunas = {
+      fai: colFai === -1 ? 'nao encontrada' : 'cabecalho (' + cabecalhos[colFai] + ')',
+      rec: colRec === -1 ? 'nao encontrada' : 'cabecalho (' + cabecalhos[colRec] + ')'
+    };
+    if (colFai === -1 && colRec === -1) {
+      throw new Error('Nenhuma coluna de meta (FAI/TRIR) encontrada na aba "' + aba.getName() + '".');
+    }
+
+    var dados = aba.getRange(1, 1, aba.getLastRow(), aba.getLastColumn()).getValues();
+    // Mesma lista de candidatos que já resolveu o rótulo do total no acumulado
+    // ("RIO CLARO" em 2026, "Total" em 2025) — evita depender de um único texto.
+    for (var r = 1; r < dados.length; r++) {
+      var nome = String(dados[r][0] || '').trim();
+      if (!nome) continue;
+      var chaveLinha = normalizarChaveTexto_(nome);
+      var ehTotal = ACUMULADO_LINHA_TOTAL_CANDIDATOS_.some(function (c) { return chaveLinha.indexOf(c) !== -1; });
+      if (!ehTotal) continue;
+
+      if (colFai !== -1) resultado.taxaFai = Number(dados[r][colFai]);
+      if (colRec !== -1) resultado.taxaRec = Number(dados[r][colRec]);
+      break;
+    }
+
+    if (resultado.taxaFai === null && resultado.taxaRec === null) {
+      resultado.erro = 'Linha de total não encontrada na aba "' + aba.getName() + '".';
+    }
+  } catch (e) {
+    resultado.erro = String(e && e.message ? e.message : e);
+  }
+
+  try { cache.put(chave, JSON.stringify(resultado), CACHE_SEGUNDOS_6H_); } catch (eCache) { /* segue sem cache */ }
+  return resultado;
+}
+
+function debugCruzSemData() {
+  var planilha = SpreadsheetApp.openById(CRUZ_VERDE_SPREADSHEET_ID_);
+  var aba = localizarAbaTolerante_(planilha, CRUZ_VERDE_ABA_);
+  var tudo = aba.getRange(1, 1, aba.getLastRow(), aba.getLastColumn()).getValues();
+  var col = obterIndicesCruzVerde_(tudo[0]).indices;
+
+  var amostra = [];
+  for (var i = 1; i < tudo.length && amostra.length < 20; i++) {
+    var data = tudo[i][col.data];
+    if (!(data instanceof Date) || isNaN(data.getTime())) {
+      amostra.push('linha ' + (i + 1) + ': valor="' + data + '" tipo=' + typeof data);
+    }
+  }
+  Logger.log(amostra.join('\n'));
+  return amostra;
 }
 
 /**
@@ -1850,6 +4086,35 @@ function localizarAbaTolerante_(planilha, nome) {
   return null;
 }
 
+/**
+ * Quantas colunas ler para cobrir TODOS os índices de um mapa já resolvido.
+ *
+ * Existe por causa de um defeito REAL (achado em 26/08/2026, vivo desde 25/08 e
+ * publicado para o time na v80): o número de colunas era um `Math.max` sobre uma
+ * lista de índices escrita À MÃO, e uma das chaves citadas não existia no mapa de
+ * cabeçalhos. `Math.max(1, 2, undefined)` é **NaN**, `NaN + 1` é NaN, e o
+ * getRange recusa com "O número de colunas no intervalo precisa ser pelo menos
+ * 1" — mensagem que não diz uma palavra sobre a causa. O painel inteiro morria.
+ *
+ * Duas defesas: (a) varre o mapa, então chave não declarada não tem como ser
+ * citada; (b) LANÇA nomeando a chave culpada em vez de devolver NaN, porque o
+ * conserto é sempre no mapa de cabeçalhos e o erro tem de apontar para lá.
+ */
+function colunasNecessarias_(indices, ondeParaOErro) {
+  var onde = ondeParaOErro || 'leitura de planilha';
+  var maior = -1;
+  Object.keys(indices || {}).forEach(function (chave) {
+    var i = indices[chave];
+    if (typeof i !== 'number' || isNaN(i) || i < 0) {
+      throw new Error('Índice inválido para a coluna "' + chave + '" em ' + onde + ': ' +
+        i + '. A chave existe no código mas não no mapa de cabeçalhos.');
+    }
+    if (i > maior) maior = i;
+  });
+  if (maior < 0) throw new Error('Nenhuma coluna resolvida em ' + onde + '.');
+  return maior + 1;
+}
+
 /** Elege a coluna com mais valores casando um padrão (amostra de 400 linhas). */
 function localizarColunaPorPadrao_(dados, padrao) {
   var limite = Math.min(dados.length, 401);
@@ -1905,6 +4170,143 @@ function obterResumoDojo_(forcar) {
   } catch (e) {
     return { fonte: 'erro', erro: String(e && e.message ? e.message : e) };
   }
+}
+
+/* ===================================================
+ * OL DAS TAXAS TRIR / FAI — planilha de YTD (2026-08-25, retorno da Beatriz)
+ *
+ * Uma CÉLULA por indicador: AW162 para a taxa registrável (TRIR) e F162 para a
+ * FAI, na aba "YTD real + projeção". O rótulo "OL" é o que a Beatriz usou no
+ * retorno dela; o significado da sigla não foi confirmado — se um dia for, vale
+ * escrever por extenso no card.
+ *
+ * NÃO CONFUNDIR COM A META. As metas (0,095 e 1,571) continuam vindo da série do
+ * Scorecard Manufatura LAR, e o retorno da Beatriz apenas CONFIRMA esses dois
+ * números. O OL é uma segunda linha de referência, ao lado da meta.
+ *
+ * ENDEREÇO FIXO QUEBRA CALADO. Não há cabeçalho para casar por nome aqui: o
+ * usuário apontou a célula. Se alguém inserir uma linha na planilha, a célula
+ * continua devolvendo um número, só que o número errado — e nada na tela
+ * denunciaria. Por isso o diagnóstico carrega os RÓTULOS da linha 162 e o valor
+ * EXIBIDO (getDisplayValue) além do cru: é o que permite ao debugOlTaxas mostrar
+ * que a leitura ainda aponta para a linha certa.
+ * =================================================== */
+var OL_TAXAS_SPREADSHEET_ID_ = '1rVrNuKWZRQvtYqKI4TiIseHHI7Epu0TLhgkMxUlD33s';
+var OL_TAXAS_ABA_ = 'YTD real + projeção';
+var OL_TAXAS_CELULA_REC_ = 'AW162';
+var OL_TAXAS_CELULA_FAI_ = 'F162';
+var OL_TAXAS_CACHE_CHAVE_ = 'olTaxas_v1';
+var OL_TAXAS_LINHA_ = 162;
+var OL_TAXAS_COLUNA_REC_ = 49; // AW
+
+/** Aceita número, "0,177" (padrão BR) e "0.177"; devolve null no resto. */
+function olTaxasNumero_(valor) {
+  if (valor === null || valor === undefined || valor === '') return null;
+  if (typeof valor === 'number') return isFinite(valor) ? valor : null;
+
+  var texto = String(valor).trim().replace('%', '').replace(',', '.');
+  if (!texto) return null;
+  var n = Number(texto);
+  return isFinite(n) ? n : null;
+}
+
+/**
+ * Lê os dois OL. NUNCA lança: se a planilha estiver fora do ar ou a célula
+ * vazia, devolve `erro` e os valores em null, e o card simplesmente não desenha
+ * a linha do OL — a home não pode quebrar por causa de uma linha de referência.
+ */
+function obterOlTaxas_(forcar) {
+  var cache = CacheService.getScriptCache();
+  if (!forcar) {
+    var cacheado = cache.get(OL_TAXAS_CACHE_CHAVE_);
+    if (cacheado) return JSON.parse(cacheado);
+  }
+
+  var resultado = { taxaRec: null, taxaFai: null, erro: null, diagnostico: {} };
+
+  try {
+    var planilha = SpreadsheetApp.openById(OL_TAXAS_SPREADSHEET_ID_);
+    var aba = localizarAbaTolerante_(planilha, OL_TAXAS_ABA_);
+    if (!aba) {
+      throw new Error('Aba "' + OL_TAXAS_ABA_ + '" não encontrada. Abas disponíveis: ' +
+        planilha.getSheets().map(function (s) { return s.getName(); }).join(', '));
+    }
+
+    if (aba.getMaxRows() < OL_TAXAS_LINHA_ || aba.getMaxColumns() < OL_TAXAS_COLUNA_REC_) {
+      throw new Error('A aba "' + aba.getName() + '" tem ' + aba.getMaxRows() + ' linhas x ' +
+        aba.getMaxColumns() + ' colunas — as células ' + OL_TAXAS_CELULA_REC_ + ' / ' +
+        OL_TAXAS_CELULA_FAI_ + ' não existem.');
+    }
+
+    var celulaRec = aba.getRange(OL_TAXAS_CELULA_REC_);
+    var celulaFai = aba.getRange(OL_TAXAS_CELULA_FAI_);
+
+    resultado.taxaRec = olTaxasNumero_(celulaRec.getValue());
+    resultado.taxaFai = olTaxasNumero_(celulaFai.getValue());
+
+    // Rótulos da linha apontada — a defesa contra linha inserida na planilha.
+    var rotulos = aba.getRange(OL_TAXAS_LINHA_, 1, 1, 5).getValues()[0]
+      .map(function (v) { return String(v === null || v === undefined ? '' : v).trim(); })
+      .filter(function (t) { return t; });
+
+    resultado.diagnostico = {
+      aba: aba.getName(),
+      linha: OL_TAXAS_LINHA_,
+      rotulosDaLinha: rotulos,
+      rec: {
+        celula: OL_TAXAS_CELULA_REC_,
+        bruto: String(celulaRec.getValue()),
+        exibido: celulaRec.getDisplayValue()
+      },
+      fai: {
+        celula: OL_TAXAS_CELULA_FAI_,
+        bruto: String(celulaFai.getValue()),
+        exibido: celulaFai.getDisplayValue()
+      }
+    };
+
+    if (resultado.taxaRec === null && resultado.taxaFai === null) {
+      resultado.erro = 'As duas células estão vazias ou não são numéricas.';
+    }
+  } catch (e) {
+    resultado.erro = String(e && e.message ? e.message : e);
+  }
+
+  try {
+    cache.put(OL_TAXAS_CACHE_CHAVE_, JSON.stringify(resultado), CACHE_SEGUNDOS_6H_);
+  } catch (e) { /* cache indisponível não invalida o valor já lido */ }
+
+  return resultado;
+}
+
+/**
+ * Confere a leitura do OL contra a planilha viva. O que interessa no log: os
+ * RÓTULOS DA LINHA (provam que 162 continua sendo a linha certa) e o par bruto x
+ * exibido de cada célula — se o exibido for "0,10%" e o bruto "0.001", a célula
+ * está formatada como porcentagem e a escala precisa de conversa.
+ *
+ * GABARITO do retorno da Beatriz (25/08): OL TRIR = 0,0914 · OL FAI = 0,883.
+ */
+function debugOlTaxas() {
+  var r = obterOlTaxas_(true);
+  var d = r.diagnostico || {};
+  var linhas = [
+    'OL DAS TAXAS — ' + OL_TAXAS_SPREADSHEET_ID_,
+    '  aba encontrada: ' + (d.aba || '(nenhuma)'),
+    '  rótulos da linha ' + (d.linha || OL_TAXAS_LINHA_) + ': ' +
+      ((d.rotulosDaLinha && d.rotulosDaLinha.length) ? d.rotulosDaLinha.join(' | ') : '(linha sem texto nas colunas A..E)'),
+    '',
+    '  OL TRIR · ' + (d.rec ? d.rec.celula + ' — bruto "' + d.rec.bruto + '" · exibido "' + d.rec.exibido + '"' : '(não lida)'),
+    '  OL FAI  · ' + (d.fai ? d.fai.celula + ' — bruto "' + d.fai.bruto + '" · exibido "' + d.fai.exibido + '"' : '(não lida)'),
+    '',
+    '  O PORTAL VAI USAR:  OL TRIR = ' + r.taxaRec + '   OL FAI = ' + r.taxaFai,
+    '  GABARITO da Beatriz (25/08):  OL TRIR = 0,0914   OL FAI = 0,883',
+    r.erro ? '  ERRO: ' + r.erro : '  sem erro'
+  ];
+
+  var msg = linhas.join('\n');
+  Logger.log(msg);
+  return msg;
 }
 
 function montarResumoHome_(ano, anosDisponiveis, cruz) {
@@ -1989,8 +4391,22 @@ function montarResumoHome_(ano, anosDisponiveis, cruz) {
     return null;
   }
 
-  var metaRecSerie = serieDoIndicador_('trr total recordable rate', 'meta');
-  var metaFaiSerie = serieDoIndicador_('first aid', 'meta');
+  // DEPOIS — meta passou a vir da aba "Metas {ano}" (pedido do usuário,
+// 2026-08-27), não mais do Scorecard. `scorecard` continua sendo lido logo
+// acima só para preencher `oficial.*` (série publicada), que é outro uso.
+var metasPlanta = obterMetasPlanta_(ano);
+function serieConstanteMeta_(valor) {
+  if (valor === null || valor === undefined || isNaN(valor)) return null;
+  var s = [];
+  for (var i = 0; i < 12; i++) s.push(valor);
+  return s;
+}
+var metaRecSerie = serieConstanteMeta_(metasPlanta.taxaRec);
+var metaFaiSerie = serieConstanteMeta_(metasPlanta.taxaFai);
+
+  // Segunda linha de referência dos cards de taxa, ao lado da meta (retorno da
+  // Beatriz, 25/08). Nunca lança: se falhar, vem null e o card só não desenha.
+  var olTaxas = obterOlTaxas_();
 
   return {
     ano: ano,
@@ -2009,11 +4425,27 @@ function montarResumoHome_(ano, anosDisponiveis, cruz) {
       taxaFai: acumHoras > 0 ? (acumFai * TAXA_BASE_HORAS_) / acumHoras : null,
       taxaRec: acumHoras > 0 ? (acumRec * TAXA_BASE_HORAS_) / acumHoras : null
     },
-    metas: {
-      taxaFai: primeiraMeta_(metaFaiSerie),
-      taxaRec: primeiraMeta_(metaRecSerie),
-      serieFai: metaFaiSerie,
-      serieRec: metaRecSerie
+    // As METAS continuam saindo do Scorecard Manufatura LAR — o retorno da
+    // Beatriz de 25/08 confirma os dois valores que já estavam na tela (0,095 e
+    // 1,571). Quem passou a vir da planilha de YTD é o OL, logo abaixo.
+    // DEPOIS
+metas: {
+  taxaFai: metasPlanta.taxaFai,
+  taxaRec: metasPlanta.taxaRec,
+  serieFai: metaFaiSerie,
+  serieRec: metaRecSerie,
+  origem: metasPlanta.erro
+    ? ('Falha ao ler "Metas ' + ano + '": ' + metasPlanta.erro)
+    : ('Planilha "' + metasPlanta.aba + '" (linha RIO CLARO)')
+    },
+    // OL — segunda linha de referência dos dois cards de taxa. Célula fixa na
+    // planilha de YTD (ver obterOlTaxas_). `erro` preenchido = o card não
+    // desenha a linha nem mostra o valor, em vez de exibir número inventado.
+    ol: {
+      taxaFai: olTaxas.taxaFai,
+      taxaRec: olTaxas.taxaRec,
+      origem: 'Planilha "' + OL_TAXAS_ABA_ + '" (' + OL_TAXAS_CELULA_FAI_ + ' / ' + OL_TAXAS_CELULA_REC_ + ')',
+      erro: olTaxas.erro
     },
     // Séries PUBLICADAS no Scorecard — é o que a liderança valida. Desde
     // 2026-07-27 são elas que a home exibe, e não mais a taxa que calculávamos
@@ -2136,6 +4568,16 @@ function aquecerCaches() {
   var inicio = new Date().getTime();
   var relatorio = [];
 
+  // Base bruta da Cruz PRIMEIRO: desde 25/08/2026 ela é a fonte de
+  // getAnosDisponiveis E das leituras por ano. Renovada aqui, tudo o que vem
+  // depois (inclusive a lista de anos) já sai do pacote quente.
+  try {
+    var brutaCruz = obterCruzVerdeLinhas_(true);
+    relatorio.push('Cruz Verde (base): ' + brutaCruz.linhas.length + ' linhas');
+  } catch (e) {
+    relatorio.push('Cruz Verde (base): ERRO ' + e.message);
+  }
+
   var anos = [];
   try {
     anos = getAnosDisponiveis().slice(0, 1); // só o ano corrente: é o que a tela abre
@@ -2166,6 +4608,15 @@ function aquecerCaches() {
     relatorio.push('Programa TAG: ERRO ' + e.message);
   }
 
+  // Duas células só, mas abrir a planilha custa segundos e isso acontece na
+  // montagem da home — mais barato pagar aqui do que na cara do usuário.
+  try {
+    var olTaxas = obterOlTaxas_(true);
+    relatorio.push('OL das taxas: ' + (olTaxas.erro ? 'ERRO ' + olTaxas.erro : 'ok'));
+  } catch (e) {
+    relatorio.push('OL das taxas: ERRO ' + e.message);
+  }
+
   anos.forEach(function (ano) {
     try {
       obterDadosScorecard_(ano, true);
@@ -2193,10 +4644,153 @@ function aquecerCaches() {
 }
 
 /**
- * Instala (ou reinstala) o acionador por tempo do aquecimento. Rodar UMA vez
- * no editor do Apps Script. Remove duplicatas antes de criar, então pode ser
- * executada de novo sem empilhar acionadores.
+ * Inventário de TODO cache do portal, com o TTL de cada um e se o acionador de
+ * aquecimento cobre ou não. É a lista que debugCachesQuentes lê.
+ *
+ * MANTER EM DIA: cache novo que não entrar aqui fica invisível no diagnóstico,
+ * e chave escrita errada faz o relatório mentir "FRIO" para sempre — por isso o
+ * `tag-saf-registros.test.js` confere as chaves contra a gravação real.
+ *
+ * `aquecido` significa: aquecerCaches renova esta chave. Hoje ele cobre 6 das
+ * 18 — as outras 12 só são preenchidas quando alguém abre a tela e espera.
  */
+function inventarioCachesSaf_() {
+  var ano = new Date().getFullYear();
+  return [
+    { nome: 'Cruz ' + ano + ' — home E painel', chave: CRUZ_CACHE_CHAVE_ + ano, fatiado: true, ttl: cruzSegundosCache_(ano), aquecido: true },
+    { nome: 'Cruz Verde — base bruta (todos os anos)', chave: CRUZ_VERDE_CACHE_CHAVE_, fatiado: true, ttl: CACHE_SEGUNDOS_30MIN_, aquecido: true },
+    { nome: 'TAG SAF (~70 mil linhas)', chave: TAG_SAF_CACHE_CHAVE_, fatiado: true, ttl: TAG_SAF_CACHE_SEGUNDOS_, aquecido: true },
+    { nome: 'TAG SAF — registros ' + ano, chave: TAG_SAF_REG_CACHE_PREFIXO_ + ano + TAG_SAF_REG_META_SUFIXO_, fatiado: false, ttl: TAG_SAF_CACHE_SEGUNDOS_, aquecido: true },
+    { nome: 'HHT', chave: HHT_CACHE_CHAVE_, fatiado: false, ttl: CACHE_SEGUNDOS_6H_, aquecido: true },
+    { nome: 'Scorecard ' + ano, chave: SCORECARD_CACHE_CHAVE_ + ano, fatiado: false, ttl: CACHE_SEGUNDOS_6H_, aquecido: true },
+    { nome: 'Programa TAG (KPI da home)', chave: PROGRAMA_TAG_CACHE_CHAVE_, fatiado: false, ttl: TAG_SAF_CACHE_SEGUNDOS_, aquecido: true },
+
+    { nome: 'OL das taxas TRIR/FAI', chave: OL_TAXAS_CACHE_CHAVE_, fatiado: false, ttl: CACHE_SEGUNDOS_6H_, aquecido: true },
+
+    { nome: 'HHT acumulado ' + ano + ' (tiles REC/FAI da home)', chave: HHT_ACUMULADO_CACHE_CHAVE_ + ano, fatiado: false, ttl: CACHE_SEGUNDOS_6H_, aquecido: false },
+    { nome: 'Farol Pilar SAF (Expansão/Extensão da home)', chave: FAROL_SAF_CACHE_CHAVE_, fatiado: true, ttl: CACHE_SEGUNDOS_6H_, aquecido: false },
+    { nome: 'Dojo', chave: DOJO_CACHE_CHAVE_, fatiado: false, ttl: CACHE_SEGUNDOS_6H_, aquecido: false },
+    { nome: 'Campanha', chave: CAMPANHA_CACHE_CHAVE_, fatiado: false, ttl: CAMPANHA_CACHE_SEGUNDOS_, aquecido: false },
+    { nome: 'TAG SAFETY (matriz)', chave: TAG_SAFETY_CACHE_CHAVE_, fatiado: false, ttl: TAG_SAF_CACHE_SEGUNDOS_, aquecido: false },
+
+    { nome: 'Boneco / Partes do corpo', chave: PARTES_CORPO_CACHE_CHAVE_, fatiado: true, ttl: PARTES_CORPO_CACHE_SEGUNDOS_, aquecido: false },
+    { nome: 'ATS', chave: ATS_CACHE_CHAVE_, fatiado: true, ttl: ATS_CACHE_SEGUNDOS_, aquecido: false },
+    { nome: 'Ocorrências (painel)', chave: OCORRENCIAS_PAINEL_CACHE_CHAVE_, fatiado: true, ttl: CACHE_SEGUNDOS_6H_, aquecido: false },
+    { nome: 'Causa raiz', chave: CAUSA_RAIZ_CACHE_CHAVE_, fatiado: true, ttl: CACHE_SEGUNDOS_6H_, aquecido: false },
+    { nome: 'Objeto causador', chave: OBJETO_CAUSADOR_CACHE_CHAVE_, fatiado: true, ttl: CACHE_SEGUNDOS_6H_, aquecido: false },
+    { nome: 'SAF auditoria', chave: SAF_AUDITORIA_CACHE_CHAVE_, fatiado: true, ttl: SAF_AUDITORIA_CACHE_SEGUNDOS_, aquecido: false },
+    { nome: 'Route Map', chave: ROUTE_MAP_CACHE_CHAVE_, fatiado: true, ttl: CACHE_SEGUNDOS_6H_, aquecido: false }
+  ];
+}
+
+/**
+ * RETRATO INSTANTÂNEO: quais indicadores estão quentes AGORA.
+ *
+ * É a ferramenta da pergunta "por que às vezes demora". Não abre planilha
+ * nenhuma — só consulta o CacheService, então custa menos de um segundo e pode
+ * ser rodada várias vezes ao dia. Um indicador FRIO aqui é exatamente um que vai
+ * fazer o próximo usuário esperar a releitura da planilha.
+ */
+function debugCachesQuentes() {
+  var cache = CacheService.getScriptCache();
+  var itens = inventarioCachesSaf_();
+  var nomes = itens.map(function (i) { return i.fatiado ? i.chave + '_idx' : i.chave; });
+  var presentes = cache.getAll(nomes);
+
+  var frios = 0;
+  var friosSemAquecimento = 0;
+  var linhas = itens.map(function (i) {
+    var quente = !!presentes[i.fatiado ? i.chave + '_idx' : i.chave];
+    if (!quente) {
+      frios++;
+      if (!i.aquecido) friosSemAquecimento++;
+    }
+    return (quente ? 'QUENTE' : ' FRIO ') +
+      ' | TTL ' + Math.round(i.ttl / 60) + 'min' +
+      ' | ' + (i.aquecido ? 'aquecido  ' : 'SEM aquec.') +
+      ' | ' + i.nome;
+  });
+
+  var msg = 'CACHES EM ' + Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'dd/MM HH:mm') + '\n' +
+    linhas.join('\n') +
+    '\n\n' + frios + ' de ' + itens.length + ' FRIOS' +
+    ' (' + friosSemAquecimento + ' deles sem aquecimento — esses só esquentam quando alguém abre a tela e espera).';
+  Logger.log(msg);
+  return msg;
+}
+
+/**
+ * Mede quanto custa RECALCULAR cada indicador, em segundos, com o cache
+ * ignorado de propósito. É o outro lado de debugCachesQuentes: aquele diz o que
+ * está frio, este diz quanto custa estar frio.
+ *
+ * ORDEM: do mais barato para o mais caro. Na 1ª versão a TAG SAF vinha primeiro
+ * e sozinha comeu 249s dos 300 do orçamento — os outros 11 indicadores saíram
+ * todos como "pulado por tempo" e a medição não serviu para nada.
+ *
+ * A TAG SAF fica de fora por padrão justamente por isso; passe `true` para
+ * incluí-la numa rodada só dela.
+ *
+ * CUIDADO AO MEDIR A CRUZ: `getCruzAnoCompleto(ano, true)` repassa o `forcar`
+ * para `obterTotaisTagSaf_` (linha ~1045) e RELÊ as 70 mil linhas junto — foi o
+ * que inflou a primeira medição para 318s. Aqui a chave é removida e a função
+ * chamada SEM forçar, que é o caminho real do aquecimento.
+ *
+ * @param {boolean} [incluirTagSaf] mede também a leitura da TAG SAF (~4 min)
+ */
+function debugTempoIndicadores(incluirTagSaf) {
+  var inicio = new Date().getTime();
+  var LIMITE_MS = 5 * 60 * 1000;
+  var linhas = [];
+
+  function medir(nome, fn) {
+    if (new Date().getTime() - inicio > LIMITE_MS) {
+      linhas.push('  (pulado por tempo) ' + nome);
+      return;
+    }
+    var t0 = new Date().getTime();
+    var nota = '';
+    try {
+      fn();
+    } catch (e) {
+      nota = '  ERRO: ' + (e && e.message ? e.message : e);
+    }
+    var seg = Math.round((new Date().getTime() - t0) / 100) / 10;
+    linhas.push('  ' + seg + 's — ' + nome + nota);
+  }
+
+  var ano = getAnosDisponiveis()[0] || new Date().getFullYear();
+
+  medir('Farol Pilar SAF', function () { getFarolSaf(true); });
+  medir('HHT acumulado ' + ano, function () { obterAcumuladoPlanta_(ano, true); });
+  medir('HHT', function () { obterDadosHHT_(true); });
+  medir('Scorecard ' + ano, function () { obterDadosScorecard_(ano, true); });
+  medir('Route Map', function () { getRouteMap(ano, true); });
+  medir('SAF auditoria', function () { getSafAuditoria(true); });
+  medir('Causa raiz', function () { getCausaRaiz(true); });
+  medir('Objeto causador', function () { getObjetoCausadorData(true); });
+  medir('Ocorrências (painel)', function () { getOcorrenciasPainel(true); });
+  medir('ATS', function () { getAtsAbertos(true); });
+  medir('Boneco / Partes do corpo', function () { obterPartesDoCorpoTudo_(true); });
+  medir('Cruz ' + ano + ' (TAG SAF vem do cache, como no aquecimento)', function () {
+    cacheRemoverGrande_(CRUZ_CACHE_CHAVE_ + ano);
+    delete CRUZ_MEMO_[ano];
+    getCruzAnoCompleto(ano);
+  });
+
+  if (incluirTagSaf) {
+    medir('TAG SAF — leitura das ~70 mil linhas + gravação dos registros', function () { obterTotaisTagSaf_(true); });
+  } else {
+    linhas.push('  (fora desta rodada) TAG SAF — chame debugTempoIndicadores(true) para medi-la');
+  }
+
+  var total = Math.round((new Date().getTime() - inicio) / 100) / 10;
+  var msg = 'CUSTO DE RECALCULAR CADA INDICADOR (cache ignorado)\n' + linhas.join('\n') +
+    '\n\ntotal da medição: ' + total + 's';
+  Logger.log(msg);
+  return msg;
+}
+
 /**
  * Instala (ou reinstala) o acionador por tempo do aquecimento. Rodar UMA vez
  * no editor do Apps Script. Remove duplicatas antes de criar, então pode ser
@@ -2223,7 +4817,13 @@ function limparCachesSaf() {
     HHT_CACHE_CHAVE_,
     CAMPANHA_CACHE_CHAVE_,
     TAG_SAFETY_CACHE_CHAVE_,
-    PROGRAMA_TAG_CACHE_CHAVE_
+    PROGRAMA_TAG_CACHE_CHAVE_,
+    OL_TAXAS_CACHE_CHAVE_,
+    // Estava no inventário mas FALTAVA aqui (achado na auditoria de 26/08/2026):
+    // limparCachesSaf não apagava o Dojo, então uma correção na planilha de
+    // origem só aparecia quando o TTL vencesse — e quem limpou o cache ficaria
+    // achando que o número velho era o certo.
+    DOJO_CACHE_CHAVE_
   ];
 
   // Boneco — Partes do Corpo: fatiado (cacheGravarGrande_), remoção própria
@@ -2253,14 +4853,33 @@ function limparCachesSaf() {
     chaves.push(HHT_ACUMULADO_CACHE_CHAVE_ + ano);
   });
 
-  // TAG SAF é fatiado (v2) — remoção própria, um removeAll simples deixaria os
+  // TAG SAF é fatiado (v3) — remoção própria, um removeAll simples deixaria os
   // pedaços _p0.._pN pra trás.
   cacheRemoverGrande_(TAG_SAF_CACHE_CHAVE_);
 
-  getAnosDisponiveis().forEach(function (ano) {
+  // A lista de anos é capturada ANTES de limpar a base bruta da Cruz — desde
+  // 25/08/2026 getAnosDisponiveis sai desse mesmo pacote, e limpá-lo primeiro
+  // faria esta função reler a planilha só para saber quais chaves apagar.
+  var anosParaLimpar = getAnosDisponiveis();
+  cacheRemoverGrande_(CRUZ_VERDE_CACHE_CHAVE_);
+
+  anosParaLimpar.forEach(function (ano) {
     chaves.push(SCORECARD_CACHE_CHAVE_ + ano);
     cacheRemoverGrande_(CRUZ_CACHE_CHAVE_ + ano);
     delete CRUZ_MEMO_[ano];
+
+    // Registros da TAG SAF: uma chave fatiada por área. A sentinela do ano diz
+    // quais existem — sem ela não há como varrer o CacheService por prefixo.
+    var chaveMeta = TAG_SAF_REG_CACHE_PREFIXO_ + ano + TAG_SAF_REG_META_SUFIXO_;
+    var meta = cache.get(chaveMeta);
+    if (meta) {
+      try {
+        JSON.parse(meta).forEach(function (chaveNorm) {
+          cacheRemoverGrande_(tagSafRegChave_(ano, chaveNorm));
+        });
+      } catch (e) { /* sentinela ilegível: os pedaços expiram sozinhos no TTL */ }
+    }
+    chaves.push(chaveMeta);
   });
 
   cache.removeAll(chaves);
@@ -2655,7 +5274,13 @@ var OCORRENCIAS_ABA_ = 'Ocorrências (FAI / REC)';
 // lugar que lê este pacote — Boneco, card do Meu Feed e o FAI x Recordable —
 // então sem subir a versão o cache de 6h serviria a contagem antiga por até 6h
 // depois do deploy, com o gráfico novo mostrando o número velho.
-var PARTES_CORPO_CACHE_CHAVE_ = 'partesDoCorpoTudo_v6';
+// v7 em 2026-08-25: as áreas deixaram de ser a coluna `Area` (linha/setor) e
+// passaram a ser a MACRO (BC) canonicalizada, para o Boneco compartilhar o
+// filtro com a Cruz. O cache v6 serviria a lista de áreas antiga e o filtro não
+// casaria nada até ele expirar.
+// v8, mesmo dia: entrou parseDataOcorrencia_ e 12 ocorrências que estavam com a
+// data em TEXTO voltaram (fev, abr e mai/2026). O conteúdo mudou, sobe a versão.
+var PARTES_CORPO_CACHE_CHAVE_ = 'partesDoCorpoTudo_v8';
 var PARTES_CORPO_CACHE_SEGUNDOS_ = CACHE_SEGUNDOS_6H_;
 var PARTES_CORPO_MEMO_ = null; // dedup dentro de uma execução
 
@@ -2673,7 +5298,16 @@ var OCORRENCIAS_CABECALHOS_ = {
   // definiu 'Area' (a linha exata, ex: "LINHA 5 - REDENTOR 20") como a coluna
   // oficial, pra o boneco e a página de Ocorrências agruparem pela MESMA
   // taxonomia — antes cada um usaria uma e os totais por área não bateriam.
+  //
+  // 2026-08-25: continua sendo lida, mas deixou de ser a coluna de AGRUPAMENTO —
+  // virou o detalhe exibido. Quem agrupa agora é `areaMacro` (BC), abaixo.
   area: 'Area',
+  // Coluna BC, "Employee Dept, Area (WHERE)". É o nível DEPARTAMENTO, a mesma
+  // taxonomia da coluna H da Cruz Verde (lá em caixa alta com hífen, o que
+  // normalizarChaveTexto_ resolve). É ela que permite ao filtro de área da Cruz
+  // comandar o Boneco e o painel de Ocorrências: 16 valores distintos, contra
+  // 137 de `Area`. Medido por debugPonteAreas em 25/08/2026.
+  areaMacro: 'Employee Dept, Area (WHERE)',
   bodyPart: 'Body Part',
   detailedBodyPart: 'Detailed Body Part(s)',
   diagnostico: 'Injury/Illness Type',
@@ -2905,9 +5539,23 @@ function obterPartesDoCorpoTudo_(forcar) {
   if (ultimaLinha > 1) {
     var dados = aba.getRange(2, 1, ultimaLinha - 1, ultimaColuna).getValues();
 
+    // 1ª PASSADA: só conta as grafias de área macro, para decidir o rótulo
+    // canônico de cada grupo. Mesma técnica de calcularCruzAnoCompleto_, e é o
+    // que faz "MONTAGEM - LAVANDERIA" daqui virar o MESMO rótulo que a Cruz
+    // exibe — sem isso o filtro compartilhado não casaria nada.
+    var contagemAreaBruta = {};
     dados.forEach(function (linha) {
-      var dataCaso = linha[idx.caseDate];
-      if (!(dataCaso instanceof Date)) return; // sem data válida, não dá pra agrupar
+      var bruta = String(linha[idx.areaMacro] || '').trim();
+      if (bruta) contagemAreaBruta[bruta] = (contagemAreaBruta[bruta] || 0) + 1;
+    });
+    var mapaAreaCanonica = obterRotuloCanonicoArea_(contagemAreaBruta);
+
+    dados.forEach(function (linha) {
+      // Aceita data em TEXTO ("06-May-2026"). Medido em 25/08/2026: 12 das 420
+      // linhas estavam assim, e o `instanceof Date` puro as descartava em
+      // silêncio — fevereiro, abril e maio de 2026 sumiam do Boneco inteiro.
+      var dataCaso = parseDataOcorrencia_(linha[idx.caseDate]);
+      if (!dataCaso) return; // sem data válida, não dá pra agrupar
 
       var ano = Number(Utilities.formatDate(dataCaso, fusoPlanilha, 'yyyy'));
       var mes = Number(Utilities.formatDate(dataCaso, fusoPlanilha, 'M'));
@@ -2940,12 +5588,17 @@ function obterPartesDoCorpoTudo_(forcar) {
       var regiao = regiaoCorpoDoTexto_(linha[idx.detailedBodyPart]);
       if (regiao === 'outro') regiao = regiaoCorpoDoTexto_(linha[idx.bodyPart]);
 
-      var area = String(linha[idx.area] || '').trim() || 'Não informado';
+      // AGRUPA pela macro (BC) desde 25/08/2026 — é o que faz o Boneco falar a
+      // mesma língua do filtro da Cruz. A micro (`Area`, a linha exata) não se
+      // perde: vai no registro e continua aparecendo no feed.
+      var areaBruta = String(linha[idx.areaMacro] || '').trim();
+      var area = areaBruta ? (mapaAreaCanonica[areaBruta] || areaBruta) : 'Não informado';
+      var areaMicro = String(linha[idx.area] || '').trim();
 
       var registro = {
         diagnostico: String(linha[idx.diagnostico] || '').trim() || 'Não informado',
         data: Utilities.formatDate(dataCaso, fusoPlanilha, 'dd/MM/yyyy'),
-        area: area,
+        area: areaMicro || area,
         descricao: String(linha[idx.descricao] || '').trim().slice(0, 200)
       };
 
@@ -3272,8 +5925,8 @@ function debugResumoRecordable(ano) {
   if (ultimaLinha > 1) {
     var dados = aba.getRange(2, 1, ultimaLinha - 1, ultimaColuna).getValues();
     dados.forEach(function (linha) {
-      var dataCaso = linha[idx.caseDate];
-      if (!(dataCaso instanceof Date)) return;
+      var dataCaso = parseDataOcorrencia_(linha[idx.caseDate]);
+      if (!dataCaso) return;
       if (Number(Utilities.formatDate(dataCaso, fusoPlanilha, 'yyyy')) !== ano) return;
 
       var recordableNorm = normalizarTexto_(linha[idx.oshaRecordable]).trim();
@@ -3328,7 +5981,9 @@ var ATS_ABA_ = 'ATS';
 // agregados era sempre 0 na v2 — sem subir a versão, o cache de 6h seguiria
 // servindo zeros e a coluna "Ab." nova dos dois Paretos ficaria vazia por até
 // 6h depois do deploy, parecendo bug de front.
-var ATS_CACHE_CHAVE_ = 'atsAbertosPorResponsavel_v3';
+// v3 -> v4 em 2026-08-26: o payload ganhou `hierarquia` { total, erro }, para o
+// card poder dizer "hierarquia indisponível" em vez de desenhar uma barra só.
+var ATS_CACHE_CHAVE_ = 'atsAbertosPorResponsavel_v4';
 var ATS_CACHE_SEGUNDOS_ = CACHE_SEGUNDOS_6H_;
 
 var ATS_CABECALHOS_ = {
@@ -3449,7 +6104,8 @@ function getAtsAbertos(forcar) {
   var vazio = {
     erro: null, total: 0, aberto: 0, vencido: 0,
     porResponsavel: [], porGerente: [], porArea: [], topAtrasos: [],
-    linhasLidas: 0, semResponsavel: 0, semGerente: 0, pessoasMapeadas: 0
+    linhasLidas: 0, semResponsavel: 0, semGerente: 0, pessoasMapeadas: 0,
+    hierarquia: { total: 0, erro: null }
   };
 
   try {
@@ -3565,6 +6221,12 @@ function getAtsAbertos(forcar) {
       porResponsavel: ordenarPorTotal_(porNome),
       porGerente: ordenarPorTotal_(porGerente),
       porArea: ordenarPorTotal_(porArea),
+      // Estado da hierarquia. Sem isto, aba de pessoas ausente joga TODO mundo
+      // em "Sem gerente mapeado" e o Pareto vira uma barra só — que a tela
+      // apresenta como se fosse um achado, não como uma fonte faltando.
+      // Medido em 26/08/2026: a aba 'Base pessoas' não existe nesta planilha,
+      // e os dois Paretos por Gerente (ATS e Ocorrências) estavam assim.
+      hierarquia: { total: pessoas.total, erro: pessoas.erro },
       topAtrasos: atrasos.slice(0, ATS_TOP_ATRASOS_()),
       linhasLidas: dados.length,
       semResponsavel: semResponsavel,
@@ -3630,7 +6292,11 @@ function debugStatusAts() {
 // rodapé, pra ninguém achar que é o ano corrente.
 // ============================================================================
 
-var OCORRENCIAS_PAINEL_CACHE_CHAVE_ = 'ocorrenciasPainel_v1';
+// v2 em 2026-08-25: `porAreaStatus` passou a agrupar pela área MACRO
+// canonicalizada (era a coluna `Area`, nível linha/setor).
+// v3 -> v4 em 2026-08-26: o payload ganhou `hierarquia` { total, erro }, pelo
+// mesmo motivo do ATS.
+var OCORRENCIAS_PAINEL_CACHE_CHAVE_ = 'ocorrenciasPainel_v4';
 var OCORRENCIAS_PAINEL_MAX_ABERTOS_ = 200;   // teto da tabela, protege o cache
 var OCORRENCIAS_PAINEL_TOP_CORPO_ = 12;
 
@@ -3639,6 +6305,13 @@ var OCORRENCIAS_PAINEL_CABECALHOS_ = {
   extent: 'Extent',                   // coluna Q — gravidade
   supervisor: 'Supervisor',           // coluna AU
   area: 'Area',                       // coluna BD — mesma coluna do boneco
+  // Coluna BC. FALTAVA AQUI e o painel inteiro morria (corrigido em 26/08/2026):
+  // em 25/08 o agrupamento passou a ser pela área MACRO e `areaMacro` entrou em
+  // OCORRENCIAS_CABECALHOS_, mas ESTE mapa é outro e ficou sem a chave. O código
+  // seguia lendo `idx.areaMacro` -> undefined -> Math.max(...) = NaN -> o
+  // getRange recusava com "O número de colunas no intervalo precisa ser pelo
+  // menos 1", e o catch devolvia { erro } para os dois cards de Investigações.
+  areaMacro: 'Employee Dept, Area (WHERE)',
   bodyPart: 'Body Part',              // coluna BM
   followUp: 'Follow-up Status'        // coluna CL
 };
@@ -3684,8 +6357,9 @@ function ocorrenciaEmAberto_(bruto) {
 function getOcorrenciasPainel(forcar) {
   var vazio = {
     erro: null, total: 0, porStatus: [], porGravidade: [], porGerente: [],
-    porParteCorpo: [], abertos: [], periodo: { de: null, ate: null },
-    linhasLidas: 0, semSupervisor: 0, semGerente: 0, totalAbertos: 0, abertosExibidos: 0
+    porParteCorpo: [], porAreaStatus: [], abertos: [], periodo: { de: null, ate: null },
+    linhasLidas: 0, semSupervisor: 0, semGerente: 0, totalAbertos: 0, abertosExibidos: 0,
+    hierarquia: { total: 0, erro: null }
   };
 
   try {
@@ -3705,10 +6379,29 @@ function getOcorrenciasPainel(forcar) {
     var pessoas = obterMapaPessoasAts_(planilha);
     var fuso = planilha.getSpreadsheetTimeZone();
 
-    var colMax = Math.max(idx.caseDate, idx.extent, idx.supervisor, idx.area, idx.bodyPart, idx.followUp) + 1;
+    // Derivado do PRÓPRIO mapa resolvido, nunca de uma lista escrita à mão: foi
+    // a lista à mão que deixou passar `idx.areaMacro` undefined e virou NaN.
+    // Assim, coluna nova em OCORRENCIAS_PAINEL_CABECALHOS_ já entra na leitura,
+    // e nenhuma chave não declarada consegue ser citada aqui.
+    var colMax = colunasNecessarias_(idx, 'getOcorrenciasPainel');
     var dados = aba.getRange(2, 1, ultimaLinha - 1, colMax).getValues();
 
+    // Área MACRO canonicalizada, igual ao Boneco e à Cruz — é o que permite ao
+    // filtro de área da Cruz comandar este painel. Duas passadas: a 1ª só conta
+    // as grafias para eleger o rótulo de cada grupo.
+    var contagemAreaBruta = {};
+    dados.forEach(function (linha) {
+      var bruta = String(linha[idx.areaMacro] || '').trim();
+      if (bruta) contagemAreaBruta[bruta] = (contagemAreaBruta[bruta] || 0) + 1;
+    });
+    var mapaAreaCanonica = obterRotuloCanonicoArea_(contagemAreaBruta);
+
     var status = {}, gravidade = {}, gerentes = {}, partes = {};
+    // Área × status — alimenta o Pareto por área pintado com as MESMAS cores do
+    // card de Investigações (pedido da Beatriz, 25/08). Guardado pelo rótulo de
+    // status BRUTO da planilha; quem traduz para cor é o frontend, que já tem
+    // esse mapa para a rosca.
+    var porAreaStatus = {};
     var abertos = [];
     var semSupervisor = 0, semGerente = 0, totalAbertos = 0;
     var maisAntiga = null, maisNova = null;
@@ -3734,8 +6427,17 @@ function getOcorrenciasPainel(forcar) {
       contar_(gerentes, gerente);
       contar_(partes, linha[idx.bodyPart]);
 
-      var dataCaso = linha[idx.caseDate];
-      var ehData = (dataCaso instanceof Date) && !isNaN(dataCaso.getTime());
+      var areaBrutaLinha = String(linha[idx.areaMacro] || '').trim();
+      var areaLinha = areaBrutaLinha
+        ? (mapaAreaCanonica[areaBrutaLinha] || areaBrutaLinha)
+        : 'Não informada';
+      if (!porAreaStatus[areaLinha]) porAreaStatus[areaLinha] = {};
+      porAreaStatus[areaLinha][rotuloStatus] = (porAreaStatus[areaLinha][rotuloStatus] || 0) + 1;
+
+      // parseDataOcorrencia_ para as 12 linhas em texto: sem ele o período do
+      // rodapé ficava errado e a tabela de abertos mostrava "—" na data.
+      var dataCaso = parseDataOcorrencia_(linha[idx.caseDate]);
+      var ehData = !!dataCaso;
       if (ehData) {
         if (!maisAntiga || dataCaso < maisAntiga) maisAntiga = dataCaso;
         if (!maisNova || dataCaso > maisNova) maisNova = dataCaso;
@@ -3773,7 +6475,18 @@ function getOcorrenciasPainel(forcar) {
       porGravidade: ordenar_(gravidade),
       porGerente: ordenar_(gerentes),
       porParteCorpo: ordenar_(partes).slice(0, OCORRENCIAS_PAINEL_TOP_CORPO_),
+      // Pareto por área, já ordenado por total desc: [{ area, total, status: {rótulo: n} }]
+      porAreaStatus: Object.keys(porAreaStatus).map(function (area) {
+        var porStatus = porAreaStatus[area];
+        var total = Object.keys(porStatus).reduce(function (a, k) { return a + porStatus[k]; }, 0);
+        return { area: area, total: total, status: porStatus };
+      }).sort(function (a, b) {
+        return b.total - a.total || String(a.area).localeCompare(String(b.area));
+      }),
       abertos: abertos,
+      // Mesmo motivo do ATS: o card precisa saber que a hierarquia falhou, em
+      // vez de desenhar "Sem gerente mapeado: 420" como se fosse informação.
+      hierarquia: { total: pessoas.total, erro: pessoas.erro },
       periodo: {
         de: maisAntiga ? Utilities.formatDate(maisAntiga, fuso, 'MM/yyyy') : null,
         ate: maisNova ? Utilities.formatDate(maisNova, fuso, 'MM/yyyy') : null
@@ -3800,6 +6513,55 @@ function getOcorrenciasPainel(forcar) {
  * confiar nos números — a classificação de "em aberto" é comparação EXATA, e
  * qualquer variação de grafia na planilha aparece aqui.
  */
+/**
+ * Lista TODAS as abas da planilha de Ocorrências, com tamanho e o cabeçalho da
+ * linha 1. Nasceu em 26/08/2026: o `debugOcorrenciasPainel` provou que a aba
+ * 'Base pessoas' NÃO EXISTE nesta planilha, e a pergunta seguinte — "então onde
+ * está a hierarquia?" — não se responde adivinhando nome.
+ *
+ * `localizarAbaTolerante_` já perdoa acento e caixa, então uma aba com nome
+ * PARECIDO teria casado. Se a hierarquia estiver aqui com outro nome, é este
+ * log que mostra qual — e aí basta corrigir ATS_PESSOAS_ABA_ (uma linha).
+ * Se não estiver, ela está noutra planilha e falta o ID.
+ */
+function debugAbasOcorrencias() {
+  var planilha = SpreadsheetApp.openById(OCORRENCIAS_SPREADSHEET_ID_);
+  var abas = planilha.getSheets();
+  var linhas = [
+    'PLANILHA "' + planilha.getName() + '" — ' + OCORRENCIAS_SPREADSHEET_ID_,
+    abas.length + ' abas. Procurando a hierarquia (ATS_PESSOAS_ABA_ = "' + ATS_PESSOAS_ABA_ + '").',
+    ''
+  ];
+
+  var alvo = normalizarChaveTexto_(ATS_PESSOAS_ABA_);
+  abas.forEach(function (aba) {
+    var nome = aba.getName();
+    var nLinhas = aba.getLastRow();
+    var nCols = aba.getLastColumn();
+    var marca = normalizarChaveTexto_(nome) === alvo ? '   <<<< é a que o código procura' : '';
+    var cabecalho = '';
+    if (nLinhas >= 1 && nCols >= 1) {
+      cabecalho = aba.getRange(1, 1, 1, Math.min(nCols, 4)).getValues()[0]
+        .map(function (v) { return String(v === null || v === undefined ? '' : v).trim(); })
+        .join(' | ');
+    }
+    linhas.push('  "' + nome + '"  ' + nLinhas + ' linhas x ' + nCols + ' colunas' + marca);
+    // A hierarquia é A=Pessoa, B=Gerente, C=Área — dá pra reconhecer pelo
+    // cabeçalho mesmo que o nome da aba tenha mudado.
+    if (cabecalho) linhas.push('        linha 1: ' + cabecalho);
+  });
+
+  linhas.push('');
+  var achou = abas.some(function (a) { return normalizarChaveTexto_(a.getName()) === alvo; });
+  linhas.push(achou
+    ? 'A aba da hierarquia EXISTE — se ainda assim vier vazia, o problema é o conteúdo.'
+    : 'A aba "' + ATS_PESSOAS_ABA_ + '" NÃO EXISTE aqui. Ou ela tem outro nome (procure ' +
+      'acima uma com "Pessoa | Gerente | Área" na linha 1), ou está em OUTRA planilha — ' +
+      'e aí obterMapaPessoasAts_ precisa receber o ID dela, não o de Ocorrências.');
+
+  return debugLogar_(linhas.join('\n'));
+}
+
 function debugOcorrenciasPainel() {
   var planilha = SpreadsheetApp.openById(OCORRENCIAS_SPREADSHEET_ID_);
   var aba = localizarAbaTolerante_(planilha, OCORRENCIAS_ABA_);
@@ -3809,7 +6571,7 @@ function debugOcorrenciasPainel() {
   Logger.log('Índices resolvidos: ' + JSON.stringify(idx));
 
   var dados = aba.getRange(2, 1, aba.getLastRow() - 1,
-    Math.max(idx.followUp, idx.extent, idx.area) + 1).getValues();
+    colunasNecessarias_(idx, 'debugOcorrenciasPainel')).getValues();
 
   var st = {}, ex = {}, ar = {};
   dados.forEach(function (l) {
@@ -3828,9 +6590,76 @@ function debugOcorrenciasPainel() {
   Logger.log('--- Area (coluna usada também pelo boneco) --- ' + Object.keys(ar).length + ' valores distintos');
   Object.keys(ar).sort().slice(0, 40).forEach(function (k) { Logger.log('  "' + k + '" -> ' + ar[k]); });
 
+  // ---- Hierarquia: por que o Pareto por Gerente tem uma barra só ----------
+  // Em 26/08/2026 o painel voltou a carregar e veio "semGerente=420", ou seja
+  // NENHUMA das 420 linhas casou com a hierarquia. Três causas possíveis, e o
+  // resumo sozinho não distingue: aba ausente · aba vazia · nome que não casa.
+  // Este bloco separa as três, e é a comparação lado a lado das CHAVES
+  // NORMALIZADAS que mostra a terceira (formato de nome diferente entre as duas
+  // abas é invisível olhando cada uma de per si).
+  var pessoas = obterMapaPessoasAts_(planilha);
+  var chavesPessoas = Object.keys(pessoas.mapa || {});
+  Logger.log('--- Hierarquia: aba "' + ATS_PESSOAS_ABA_ + '" (A=Pessoa, B=Gerente, C=Área) ---');
+  Logger.log('  pessoas mapeadas: ' + pessoas.total +
+    (pessoas.erro ? '   >>> ERRO: ' + pessoas.erro : ''));
+  if (!chavesPessoas.length) {
+    Logger.log('  A HIERARQUIA ESTÁ VAZIA — é por isso que ninguém tem gerente.');
+    Logger.log('  Confira se a aba existe nesta planilha e se tem dados a partir da linha 2.');
+  } else {
+    Logger.log('  exemplos de chave normalizada na hierarquia:');
+    chavesPessoas.slice(0, 5).forEach(function (k) {
+      Logger.log('    "' + k + '"  -> gerente "' + pessoas.mapa[k].gerente + '"');
+    });
+  }
+
+  var sup = {};
+  dados.forEach(function (l) {
+    var s = String(l[idx.supervisor] || '').trim() || '(vazio)';
+    sup[s] = (sup[s] || 0) + 1;
+  });
+  var listaSup = Object.keys(sup).sort(function (a, b) { return sup[b] - sup[a]; });
+  var casaram = listaSup.filter(function (s) { return !!pessoas.mapa[normalizarChaveTexto_(s)]; });
+  Logger.log('  supervisores distintos nas ocorrências: ' + listaSup.length +
+    '   |   casam com a hierarquia: ' + casaram.length);
+  Logger.log('  os 12 mais frequentes (chave normalizada é o que o join compara):');
+  listaSup.slice(0, 12).forEach(function (s) {
+    var achou = !!pessoas.mapa[normalizarChaveTexto_(s)];
+    Logger.log('    ' + (achou ? 'OK   ' : 'FALTA') + ' "' + s + '" (' + sup[s] + ')' +
+      '   chave="' + normalizarChaveTexto_(s) + '"');
+  });
+
+  // A LISTA PARA COMPLETAR A BASE PESSOAS. Sem ela, "187 sem gerente" é um
+  // número; com ela é uma tarefa com nome e prioridade. Ordenada por VOLUME
+  // porque completar o primeiro nome vale 14 ocorrências e o último vale 1.
+  // Mesma ideia do debugAreasSemResponsavel(), só que para pessoas.
+  var faltantes = listaSup.filter(function (s) {
+    return s !== '(vazio)' && !pessoas.mapa[normalizarChaveTexto_(s)];
+  });
+  var ocorrenciasSemGerente = faltantes.reduce(function (a, s) { return a + sup[s]; }, 0);
+  Logger.log('--- SUPERVISORES SEM GERENTE NA BASE PESSOAS: ' + faltantes.length +
+    ' nomes, ' + ocorrenciasSemGerente + ' ocorrências ---');
+  Logger.log('  (acrescentar estes na aba "' + ATS_PESSOAS_ABA_ + '" fecha a lacuna do Pareto)');
+  var acumulado = 0;
+  faltantes.forEach(function (s, i) {
+    acumulado += sup[s];
+    var pct = ocorrenciasSemGerente > 0 ? Math.round((acumulado / ocorrenciasSemGerente) * 100) : 0;
+    // Os 25 primeiros nominalmente; o resto vira uma linha de resumo, senão o
+    // log estoura e o começo — que é o que importa — sai da tela.
+    if (i < 25) {
+      Logger.log('    ' + String(i + 1) + '. "' + s + '" — ' + sup[s] +
+        (sup[s] === 1 ? ' ocorrência' : ' ocorrências') + '   (acumulado ' + pct + '%)');
+    }
+  });
+  if (faltantes.length > 25) {
+    var cauda = faltantes.slice(25).reduce(function (a, s) { return a + sup[s]; }, 0);
+    Logger.log('    ... e mais ' + (faltantes.length - 25) + ' nomes somando ' + cauda +
+      ' ocorrências (cauda de 1 a 2 cada).');
+  }
+
   var r = getOcorrenciasPainel(true);
   Logger.log('Resumo: total=' + r.total + ' abertos=' + r.totalAbertos +
     ' gerentes=' + r.porGerente.length + ' semGerente=' + r.semGerente +
+    ' semSupervisor=' + r.semSupervisor +
     ' periodo=' + (r.periodo.de || '?') + '..' + (r.periodo.ate || '?'));
   return r;
 }
@@ -4286,9 +7115,32 @@ function getObjetoCausadorData(forcar) {
         OBJETO_CAUSADOR_POSICAO_BO_ + ').');
     }
 
-    var dados = aba.getRange(2, 1, ultimaLinha - 1, col.indice + 1).getValues();
+    // Índices da classificação v5, para quebrar cada categoria por TIPO de
+    // ocorrência (pedido da Beatriz em 25/08). Mesma regra de
+    // obterPartesDoCorpoTudo_ — se as duas divergirem, o mesmo caso apareceria
+    // em categorias diferentes em dois cards da MESMA aba.
+    //
+    // DEGRADA EM VEZ DE QUEBRAR: obterIndicesOcorrencias_ LANÇA se qualquer
+    // cabeçalho do dicionário mudar de nome. Este card só precisa da coluna BO
+    // para existir — derrubá-lo inteiro porque a quebra por tipo ficou
+    // indisponível seria trocar um gráfico completo por uma mensagem de erro.
+    // Sem os índices, as categorias vêm com os três tipos zerados e o frontend
+    // desenha a barra num tom neutro.
+    var idx = null;
+    var erroTipos = null;
+    try {
+      idx = obterIndicesOcorrencias_(aba);
+    } catch (e) {
+      erroTipos = String(e && e.message ? e.message : e);
+    }
+
+    var colMax = idx
+      ? Math.max(col.indice, idx.locallyReportable, idx.dafw) + 1
+      : col.indice + 1;
+    var dados = aba.getRange(2, 1, ultimaLinha - 1, colMax).getValues();
 
     var porCategoria = {}, porPalavra = {}, crusForaDeCategoria = {}, distintos = {};
+    var porCategoriaTipo = {};
     var comTexto = 0, ignoradasVazias = 0;
 
     dados.forEach(function (linha) {
@@ -4301,6 +7153,21 @@ function getObjetoCausadorData(forcar) {
       somarEm_(porCategoria, classe.categoria, 1);
       if (classe.categoria === OBJETO_CAUSADOR_CATEGORIA_RESTO_) {
         somarEm_(crusForaDeCategoria, bruto, 1);
+      }
+
+      // REGRA v5, idêntica à de obterPartesDoCorpoTudo_: registrável é o
+      // critério LOCAL (coluna P); com afastamento é registrável E DAFW; e
+      // primeiros socorros é a categoria residual, o que garante que os três
+      // somem 100% das linhas com objeto preenchido.
+      if (idx) {
+        var ehRecordable = normalizarTexto_(linha[idx.locallyReportable]).trim() === 'yes';
+        var tipo = !ehRecordable ? 'primeirosSocorros'
+          : (flagVerdadeiro_(linha[idx.dafw]) ? 'comAfastamento' : 'semAfastamento');
+
+        if (!porCategoriaTipo[classe.categoria]) {
+          porCategoriaTipo[classe.categoria] = { comAfastamento: 0, semAfastamento: 0, primeirosSocorros: 0 };
+        }
+        porCategoriaTipo[classe.categoria][tipo]++;
       }
 
       // Nuvem de palavras: minúsculas, sem acento, sem stop word, sem token de
@@ -4324,12 +7191,19 @@ function getObjetoCausadorData(forcar) {
     };
 
     // Pareto: ordenado desc + % e % acumulada já prontas pro front.
+    // A % acumulada saiu da TELA em 25/08 (pedido da Beatriz), mas continua no
+    // payload: é barata e é o que permite religar a linha sem tocar aqui.
     var categorias = ordenarMapa(porCategoria, 'nome');
     var acumulado = 0;
     categorias.forEach(function (c) {
       acumulado += c.total;
       c.pct = comTexto > 0 ? (c.total / comTexto) * 100 : 0;
       c.pctAcumulada = comTexto > 0 ? (acumulado / comTexto) * 100 : 0;
+      // Quebra por tipo de ocorrência — o que pinta as barras empilhadas.
+      var t = porCategoriaTipo[c.nome] || {};
+      c.comAfastamento = t.comAfastamento || 0;
+      c.semAfastamento = t.semAfastamento || 0;
+      c.primeirosSocorros = t.primeirosSocorros || 0;
     });
 
     var resultado = {
@@ -4341,7 +7215,14 @@ function getObjetoCausadorData(forcar) {
       ignoradasVazias: ignoradasVazias,
       distintos: Object.keys(distintos).length,
       naoClassificados: ordenarMapa(crusForaDeCategoria, 'texto').slice(0, OBJETO_CAUSADOR_TOP_NAO_CLASSIF_),
-      diagnostico: { origemColuna: col.origem, cabecalho: col.cabecalho, indice: col.indice }
+      // `temTipos` diz ao frontend se a quebra por gravidade está disponível.
+      // Sem ela o gráfico ainda existe, só que num tom neutro — e `erroTipos`
+      // explica no diagnóstico por quê, em vez de a cor sumir sem motivo.
+      temTipos: !!idx,
+      diagnostico: {
+        origemColuna: col.origem, cabecalho: col.cabecalho, indice: col.indice,
+        erroTipos: erroTipos
+      }
     };
 
     try {
@@ -4405,7 +7286,14 @@ function debugObjetoCausador() {
 // ============================================================================
 
 /**
- * Totais de Condição Insegura x Comportamento Inseguro, para o gráfico de pizza.
+ * Totais de Condição Insegura x Comportamento Inseguro.
+ *
+ * SEM CHAMADOR desde 25/08/2026: a Beatriz pediu para RETIRAR o card de pizza
+ * que ele alimentava (ela mesma o havia pedido no slide de 17/08 — é uma
+ * reversão, não um esquecimento). A função fica dormindo, como o Route Map e o
+ * SAF Action Tracker: ela só soma um pacote que a TAG SAF já mantém em cache,
+ * não custa leitura de planilha nenhuma, e é o que permite religar o card sem
+ * reescrever o backend. O renderizador da pizza foi removido do Index.html.
  *
  * NUNCA LANÇA: devolve { erro } pra um problema nesta base não derrubar a aba.
  *
