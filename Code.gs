@@ -2558,6 +2558,114 @@ function prudencioFerramentas_() {
           totalFai: d.totalFai
         };
       }
+    },
+    {
+      nome: 'riscos_por_area',
+      rotulo: 'Riscos Altos (RISK) — por área',
+      descricao: 'Riscos cadastrados no programa RISK, agrupados por área: quantidade, ' +
+        'orçamento e quantos estão em andamento x concluídos. Use para "quais riscos tem em X", ' +
+        '"quanto está orçado pra área Y", "quantos riscos abertos em Z".',
+      schema: { type: 'object', properties: {} },
+      executar: function () {
+        var d = getRiscosAltos(false);
+        if (d.erro) return { erro: d.erro };
+
+        var porArea = {};
+        (d.riscos || []).forEach(function (r) {
+          var area = r.area || 'Não informado';
+          if (!porArea[area]) porArea[area] = { area: area, quantidade: 0, orcamento: 0, andamento: 0, concluido: 0 };
+          porArea[area].quantidade += r.quantidade || 0;
+          porArea[area].orcamento += r.orcamento || 0;
+          porArea[area][r.status === 'Concluído' ? 'concluido' : 'andamento']++;
+        });
+
+        var areas = Object.keys(porArea).map(function (k) { return porArea[k]; });
+        areas.sort(function (a, b) { return b.quantidade - a.quantidade; });
+
+        return { areas: areas, orcamentoTotal: d.orcamentoTotal, quantidadeTotal: d.quantidadeTotal };
+      }
+    },
+    {
+      nome: 'apontamentos_por_area',
+      rotulo: 'Apontamentos (TAGs de segurança) — por área',
+      descricao: 'TAGs de apontamento (observações de segurança do Gensuite — NÃO são ' +
+        'ocorrências/acidentes) agrupadas por área, com o ciclo de vida (aberta, lançada, ' +
+        'fechamento solicitado, fechada). Use para "quantas TAGs tem em X", "como está o ' +
+        'apontamento da área Y".',
+      schema: { type: 'object', properties: {} },
+      executar: function () {
+        var d = getApontamentosNovo(false);
+        if (d.erro) return { erro: d.erro };
+        return { kpis: d.kpis, porArea: d.porArea, porDepartamento: d.porDepartamento, periodo: d.periodo };
+      }
+    },
+    {
+      nome: 'partes_do_corpo_por_area',
+      rotulo: 'Partes do corpo atingidas — por área',
+      descricao: 'Ocorrências de um ANO agrupadas por área, mostrando total com/sem afastamento, ' +
+        'primeiros socorros e a parte do corpo mais atingida em cada área. Use para "que tipo de ' +
+        'lesão tem mais em X", "qual parte do corpo mais afetada na área Y".',
+      schema: {
+        type: 'object',
+        properties: { ano: { type: 'number', description: 'Ano de 4 dígitos. Omita para o ano mais recente.' } }
+      },
+      executar: function (input) {
+        function somarRegioes_(destino, origem) {
+          Object.keys(origem || {}).forEach(function (regiao) {
+            destino[regiao] = (destino[regiao] || 0) + origem[regiao];
+          });
+        }
+        function totalRegioes_(mapa) {
+          return Object.keys(mapa).reduce(function (soma, k) { return soma + mapa[k]; }, 0);
+        }
+        function regiaoTopo_(mapa) {
+          var chaves = Object.keys(mapa);
+          if (!chaves.length) return null;
+          var top = chaves[0];
+          chaves.forEach(function (k) { if (mapa[k] > mapa[top]) top = k; });
+          return { regiao: top, total: mapa[top] };
+        }
+
+        var ano = Number(input && input.ano) || getAnosDisponiveis()[0];
+        var pacote = getPartesDoCorpoAnoCompleto(ano);
+        var porAreaMes = pacote.porAreaMes || {};
+        var areas = [];
+
+        Object.keys(porAreaMes).forEach(function (area) {
+          if (area === 'Todas') return;
+          var comAfastamento = {}, semAfastamento = {}, primeirosSocorros = {};
+
+          Object.keys(porAreaMes[area]).forEach(function (mes) {
+            var bucket = porAreaMes[area][mes];
+            somarRegioes_(comAfastamento, bucket.comAfastamento);
+            somarRegioes_(semAfastamento, bucket.semAfastamento);
+            somarRegioes_(primeirosSocorros, bucket.primeirosSocorros);
+          });
+
+          var todasRegioes = {};
+          somarRegioes_(todasRegioes, comAfastamento);
+          somarRegioes_(todasRegioes, semAfastamento);
+          somarRegioes_(todasRegioes, primeirosSocorros);
+
+          var totalComAfastamento = totalRegioes_(comAfastamento);
+          var totalSemAfastamento = totalRegioes_(semAfastamento);
+          var totalPrimeirosSocorros = totalRegioes_(primeirosSocorros);
+          var total = totalComAfastamento + totalSemAfastamento + totalPrimeirosSocorros;
+          if (total === 0) return;
+
+          areas.push({
+            area: area,
+            comAfastamento: totalComAfastamento,
+            semAfastamento: totalSemAfastamento,
+            primeirosSocorros: totalPrimeirosSocorros,
+            total: total,
+            parteDoCorpoMaisAtingida: regiaoTopo_(todasRegioes)
+          });
+        });
+
+        areas.sort(function (a, b) { return b.total - a.total; });
+        return { ano: ano, areas: areas };
+      }
     }
   ];
 }
@@ -3159,7 +3267,8 @@ function prudencioSaudacaoInicial() {
       nome: nome,
       texto: prudencioSaudacao_(nome) + '\n\n' +
         'Sou o Prudêncio e cuido dos números deste portal. Posso falar de ocorrências ' +
-        'por área, taxas TRIR e FAI, ações do ATS, tendência por ano e partes do corpo.\n\n' +
+        'por área, taxas TRIR e FAI, ações do ATS, riscos altos (RISK), apontamentos de TAG, ' +
+        'tendência por ano e partes do corpo — sempre por área, se você pedir.\n\n' +
         'O que você quer saber?'
     };
   } catch (e) {
