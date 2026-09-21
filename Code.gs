@@ -3303,18 +3303,23 @@ function getRiscosAltos(forcar) {
     var ultimaLinha = aba.getLastRow();
     var ultimaColuna = aba.getLastColumn();
 
+    // 2026-09-20: planilha renomeou 3 cabeçalhos (confirmado lendo a aba ao vivo).
+    // "Quantidade" -> "Quantidade Riscos" é o que estava derrubando o card inteiro
+    // (coluna obrigatória, indiceColuna_ é match exato pós-normalização — sem
+    // "Riscos" no fim não batia mais). "Ranking Risco" -> "Ranking" e "Data
+    // Fechamento do Risco" -> "Data da Conclusão" só degradavam campo opcional.
     var col = {
-      ranking: indiceColuna_(cab.cabecalhos, 'ranking risco'),
+      ranking: indiceColuna_(cab.cabecalhos, 'ranking'),
       area: indiceColuna_(cab.cabecalhos, 'area'),
       macroTema: indiceColuna_(cab.cabecalhos, 'macro tema'),
       risco: indiceColuna_(cab.cabecalhos, 'risco'),
       planoAcao: indiceColuna_(cab.cabecalhos, 'plano de acao'),
-      quantidade: indiceColuna_(cab.cabecalhos, 'quantidade'),
+      quantidade: indiceColuna_(cab.cabecalhos, 'quantidade riscos'),
       orcamento: indiceColuna_(cab.cabecalhos, 'orcamento'),
       validado: indiceColuna_(cab.cabecalhos, 'validado ehs'),
       status: indiceColuna_(cab.cabecalhos, 'status'),
       dataInicio: indiceColuna_(cab.cabecalhos, 'data inicio'),
-      dataFechamento: indiceColuna_(cab.cabecalhos, 'data fechamento do risco'),
+      dataFechamento: indiceColuna_(cab.cabecalhos, 'data da conclusao'),
       semana: indiceColuna_(cab.cabecalhos, 'contabilizacao semana'),
       meta: indiceColuna_(cab.cabecalhos, 'meta acumulado'),
       realizado: indiceColuna_(cab.cabecalhos, 'realizado acumulado')
