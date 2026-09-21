@@ -7397,6 +7397,59 @@
       requestAnimationFrame(passo);
     }
 
+    /**
+     * Ícone de leitura em voz alta pros cards do Tracker Overview (Cruz Verde,
+     * Pirâmide, boneco) — Web Speech API do navegador, sem custo e sem depender
+     * do backend. Só um card fala por vez: clicar num ícone diferente cancela a
+     * leitura anterior; clicar de novo no mesmo ícone que está falando para.
+     * (Confirmado 2026-09-20: dá pra usar a metade "falar" da Web Speech API
+     * dentro do iframe do Apps Script — é só a metade "ouvir"/microfone que o
+     * Google bloqueia via Permissions Policy do iframe wrapper.)
+     */
+    var leituraFeedAtiva_ = null; // botão atualmente falando, ou null
+
+    function pararLeituraFeed_() {
+      if (window.speechSynthesis) window.speechSynthesis.cancel();
+      if (leituraFeedAtiva_) {
+        leituraFeedAtiva_.classList.remove('text-brand-secondary');
+        leituraFeedAtiva_.classList.add('text-slate-400');
+        leituraFeedAtiva_ = null;
+      }
+    }
+
+    function criarBotaoLeituraFeed_(texto) {
+      var botao = document.createElement('button');
+      botao.type = 'button';
+      botao.title = 'Ouvir descrição';
+      botao.className = 'shrink-0 text-slate-400 hover:text-brand-primary transition-colors';
+      botao.innerHTML =
+        '<svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">' +
+          '<path stroke-linecap="round" stroke-linejoin="round" d="M11 5L6 9H2v6h4l5 4V5z"></path>' +
+          '<path stroke-linecap="round" stroke-linejoin="round" d="M15.54 8.46a5 5 0 010 7.07"></path>' +
+        '</svg>';
+
+      botao.onclick = function (ev) {
+        ev.stopPropagation();
+        if (!window.speechSynthesis) return; // navegador sem suporte — botão fica mudo, sem quebrar nada
+
+        var jaEraEsse = leituraFeedAtiva_ === botao;
+        pararLeituraFeed_();
+        if (jaEraEsse) return; // clique no ícone que já estava falando = só para
+
+        var fala = new SpeechSynthesisUtterance(texto);
+        fala.lang = 'pt-BR';
+        fala.onend = function () { if (leituraFeedAtiva_ === botao) pararLeituraFeed_(); };
+        fala.onerror = function () { if (leituraFeedAtiva_ === botao) pararLeituraFeed_(); };
+
+        leituraFeedAtiva_ = botao;
+        botao.classList.remove('text-slate-400');
+        botao.classList.add('text-brand-secondary');
+        window.speechSynthesis.speak(fala);
+      };
+
+      return botao;
+    }
+
     // Os três modos do feed (dia da Cruz, região do boneco, responsável do ATS)
     // são MUTUAMENTE EXCLUSIVOS: entrar num sai dos outros, senão o feed
     // mostraria um conteúdo com o subtítulo de outro.
@@ -7464,8 +7517,13 @@
         depLabel.className = 'text-[10px] font-bold uppercase text-slate-400 truncate ml-2';
         depLabel.textContent = ocorrencia.departamento || '';
 
+        var direitaCabecalho = document.createElement('span');
+        direitaCabecalho.className = 'flex items-center gap-1.5 shrink-0';
+        direitaCabecalho.appendChild(depLabel);
+        if (ocorrencia.descricao) direitaCabecalho.appendChild(criarBotaoLeituraFeed_(ocorrencia.descricao));
+
         cabecalho.appendChild(diaLabel);
-        cabecalho.appendChild(depLabel);
+        cabecalho.appendChild(direitaCabecalho);
 
         var descricao = document.createElement('p');
         descricao.className = 'text-xs text-slate-500 mt-1 leading-snug';
@@ -7990,8 +8048,13 @@
         areaLabel.className = 'text-[10px] font-bold uppercase text-slate-400 truncate ml-2';
         areaLabel.textContent = item.area || '';
 
+        var direitaCabecalho = document.createElement('span');
+        direitaCabecalho.className = 'flex items-center gap-1.5 shrink-0';
+        direitaCabecalho.appendChild(areaLabel);
+        if (item.descricao) direitaCabecalho.appendChild(criarBotaoLeituraFeed_(item.descricao));
+
         cabecalho.appendChild(btLabel);
-        cabecalho.appendChild(areaLabel);
+        cabecalho.appendChild(direitaCabecalho);
 
         corpo.appendChild(cabecalho);
 
@@ -8179,12 +8242,19 @@
         diaSpan.className = 'text-[10px] font-bold text-slate-400 shrink-0';
         diaSpan.textContent = quando;
 
+        var descTexto = oc.descricao || 'Sem descrição detalhada.';
+
+        var direitaCabecalho = document.createElement('span');
+        direitaCabecalho.className = 'flex items-center gap-1.5 shrink-0';
+        direitaCabecalho.appendChild(diaSpan);
+        if (oc.descricao) direitaCabecalho.appendChild(criarBotaoLeituraFeed_(descTexto));
+
         cabecalho.appendChild(areaEtiqueta);
-        cabecalho.appendChild(diaSpan);
+        cabecalho.appendChild(direitaCabecalho);
 
         var desc = document.createElement('p');
         desc.className = 'text-xs text-slate-600 leading-snug mt-1';
-        desc.textContent = oc.descricao || 'Sem descrição detalhada.';
+        desc.textContent = descTexto;
 
         card.appendChild(cabecalho);
         card.appendChild(desc);
