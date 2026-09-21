@@ -233,6 +233,57 @@ function obterFotoUsuarioPeopleApi_(email) {
 }
 
 /**
+ * DIAGNÓSTICO — roda no editor pra investigar por que a foto do usuário
+ * logado não aparece. Ignora o cache de propósito (um "SEM_FOTO" cacheado
+ * há até 6h mascararia qualquer causa nova) e já limpa a entrada cacheada
+ * do usuário atual, pra o próximo carregamento real do site refazer a
+ * busca do zero. Loga o e-mail resolvido e a resposta crua da People API
+ * — ver "Execuções" no editor do Apps Script depois de rodar.
+ */
+function debugFotoUsuarioLogado_() {
+  var email = Session.getActiveUser().getEmail();
+  Logger.log('E-mail resolvido por Session.getActiveUser(): ' + JSON.stringify(email));
+
+  if (!email) {
+    Logger.log('Vazio — sem e-mail pra buscar na People API. Verifique se o deploy está ' +
+      '"Executar como: Usuário que acessa o app" (senão getActiveUser() não enxerga quem abriu o site).');
+    return;
+  }
+
+  var cache = CacheService.getScriptCache();
+  var chaveCache = 'FOTO_EHS_V1_' + email.replace(/[^a-zA-Z0-9]/g, '');
+  cache.remove(chaveCache);
+  Logger.log('Cache da foto desse usuário limpo (chave ' + chaveCache + ').');
+
+  try {
+    var res = People.People.searchDirectoryPeople({
+      query: email,
+      readMask: 'names,photos,emailAddresses',
+      sources: ['DIRECTORY_SOURCE_TYPE_DOMAIN_PROFILE'],
+      pageSize: 5
+    });
+    Logger.log('Resposta da People API: ' + JSON.stringify(res));
+
+    if (!res.people || res.people.length === 0) {
+      Logger.log('Nenhuma pessoa encontrada no diretório pra esse e-mail.');
+    } else {
+      var fotos = res.people[0].photos;
+      if (!fotos || fotos.length === 0) {
+        Logger.log('Pessoa encontrada, mas sem NENHUMA foto (nem a silhueta padrão) no array photos.');
+      } else if (fotos[0].default) {
+        Logger.log('Pessoa encontrada, mas a única foto é a silhueta PADRÃO do Google ' +
+          '(fotos[0].default === true) — por isso cai pras iniciais. A pessoa precisa ter uma ' +
+          'foto de perfil de verdade no Google Workspace.');
+      } else {
+        Logger.log('Foto real encontrada: ' + fotos[0].url);
+      }
+    }
+  } catch (erro) {
+    Logger.log('ERRO ao chamar a People API: ' + erro.message);
+  }
+}
+
+/**
  * ===================================================
  * CRUZ DE SEGURANÇA
  *
