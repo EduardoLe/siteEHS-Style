@@ -6214,6 +6214,63 @@
         btn.classList.toggle('metrics-aba-ativa', ativa);
         btn.setAttribute('aria-selected', ativa ? 'true' : 'false');
       });
+
+      // Dica de affordance (2026-09-20): Cruz, Pirâmide e o boneco moram TODOS
+      // na aba panorama (o boneco não tem aba própria — é o bloco order-3, mais
+      // abaixo). Um aviso só cobre os três, em vez de um por elemento.
+      if (nome === 'panorama') {
+        mostrarDicaAffordance_(
+          'ehsDicaAffordancePanoramaV1',
+          document.getElementById('piramide-card'),
+          'Clique num dia da Cruz Verde, numa fatia da Pirâmide ou numa região do boneco para ver os detalhes de cada ocorrência.'
+        );
+      }
+    }
+
+    /**
+     * Dica de affordance (2026-09-20): pedido do usuário — vários elementos
+     * clicáveis do site (Cruz, Pirâmide, boneco) só davam pista de que dá pra
+     * clicar no HOVER, o que não ajuda quem nunca passou o mouse por cima.
+     * Mostra um aviso pequeno UMA VEZ POR NAVEGADOR (guardado em localStorage,
+     * nunca mais depois disso), ancorado antes do elemento passado, some
+     * sozinho depois de alguns segundos ou no primeiro clique em qualquer
+     * lugar (sinal de que a pessoa já entendeu).
+     */
+    function mostrarDicaAffordance_(chaveStorage, elementoAncora, texto) {
+      if (!elementoAncora || !elementoAncora.parentElement) return;
+
+      try {
+        if (localStorage.getItem(chaveStorage)) return; // já viu — nunca mais mostra
+        localStorage.setItem(chaveStorage, '1');
+      } catch (e) {
+        return; // localStorage bloqueado (navegação privada etc.) — sem dica, sem quebrar nada
+      }
+
+      var dica = document.createElement('div');
+      dica.className = 'xl:col-span-12 flex items-start gap-2 rounded-xl border border-brand-secondary/30 bg-brand-bg px-4 py-3 text-xs text-brand-primary font-semibold';
+      dica.innerHTML =
+        '<svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 shrink-0 mt-0.5 text-brand-secondary" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">' +
+          '<path stroke-linecap="round" stroke-linejoin="round" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>' +
+        '</svg>' +
+        '<span>' + texto + '</span>';
+
+      elementoAncora.parentElement.insertBefore(dica, elementoAncora);
+
+      var removida = false;
+      function remover() {
+        if (removida) return;
+        removida = true;
+        if (dica.parentElement) dica.parentElement.removeChild(dica);
+        document.removeEventListener('click', remover, true);
+      }
+
+      setTimeout(remover, 6000);
+      // Adia o listener pro próximo tick: sem isso, o PRÓPRIO clique que abriu
+      // o painel (ex. no ícone do menu) já dispararia o "clique em qualquer
+      // lugar" e a dica sumiria antes de aparecer.
+      setTimeout(function () {
+        document.addEventListener('click', remover, true);
+      }, 0);
     }
 
     function abrirPainelCruz() {
