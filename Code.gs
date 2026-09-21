@@ -153,13 +153,15 @@ function doGet() {
 
 /**
  * Retorna os dados iniciais necessários para montar a tela:
- * nome do usuário logado, extraído do e-mail corporativo.
+ * nome do usuário logado, extraído do e-mail corporativo, e a foto do
+ * diretório da empresa (People API), quando disponível.
  */
 function obterDadosIniciais() {
   var nome = 'Guardião';
+  var email = '';
 
   try {
-    var email = Session.getActiveUser().getEmail();
+    email = Session.getActiveUser().getEmail();
 
     if (email && email.indexOf('@') > -1) {
       var parteLocal = email.split('@')[0];
@@ -175,8 +177,59 @@ function obterDadosIniciais() {
   }
 
   return {
-    nome: nome
+    nome: nome,
+    fotoUrl: obterFotoUsuarioPeopleApi_(email)
   };
+}
+
+/**
+ * Busca a foto do usuário logado no diretório da empresa (People API,
+ * Google Workspace) pelo e-mail já resolvido acima em obterDadosIniciais.
+ * Adaptado de um script irmão da empresa (obterFotoPeopleAPI, 2026-09-20)
+ * que buscava por NOME com 3 tentativas de fallback (nome completo,
+ * primeiro+último, primeiro+segundo) pra contornar ambiguidade — aqui
+ * simplificado pra buscar só por e-mail, já que
+ * Session.getActiveUser().getEmail() não tem essa ambiguidade.
+ *
+ * NUNCA LANÇA (mesmo padrão dos `get*`): falha na People API (serviço
+ * avançado não habilitado, sem permissão, fora do ar) não pode derrubar o
+ * cabeçalho — devolve "" e o frontend cai pro avatar de iniciais.
+ */
+function obterFotoUsuarioPeopleApi_(email) {
+  if (!email) return '';
+
+  var cache = CacheService.getScriptCache();
+  var chaveCache = 'FOTO_EHS_V1_' + email.replace(/[^a-zA-Z0-9]/g, '');
+  var fotoCache = cache.get(chaveCache);
+
+  if (fotoCache !== null) {
+    return fotoCache === 'SEM_FOTO' ? '' : fotoCache;
+  }
+
+  try {
+    var res = People.People.searchDirectoryPeople({
+      query: email,
+      readMask: 'photos',
+      sources: ['DIRECTORY_SOURCE_TYPE_DOMAIN_PROFILE'],
+      pageSize: 1
+    });
+
+    if (res.people && res.people.length > 0) {
+      var fotos = res.people[0].photos;
+      // Recusa a silhueta padrão do Google (!fotos[0].default), igual ao script original.
+      if (fotos && fotos.length > 0 && !fotos[0].default) {
+        var urlFoto = fotos[0].url;
+        cache.put(chaveCache, urlFoto, 21600); // 6h
+        return urlFoto;
+      }
+    }
+
+    cache.put(chaveCache, 'SEM_FOTO', 21600);
+    return '';
+
+  } catch (erro) {
+    return '';
+  }
 }
 
 /**
