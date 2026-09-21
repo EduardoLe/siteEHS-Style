@@ -2722,6 +2722,120 @@ function prudencioFormatarTaxa_(v) {
 }
 
 /**
+ * Nomes de área conhecidos, AO VIVO — nunca hardcoded, senão uma área nova ou
+ * renomeada na planilha silenciosamente parava de casar aqui (mesma lição do
+ * bug do card RISK em 2026-09-20: cabeçalho/valor renomeado quebra match
+ * exato em silêncio). Junta o que cada fonte área-consciente do portal já
+ * devolve, deduplicado pela forma NORMALIZADA (sem acento) — o mesmo
+ * "Logística"/"Logistica" de fontes diferentes vira uma linha só.
+ *
+ * Usado só pelo motor de regras, pra reconhecer nome de área dentro de texto
+ * livre sem IA. O modo IA não precisa disso — o modelo lida com nome de área
+ * em texto livre sozinho, direto nas ferramentas de prudencioFerramentas_.
+ */
+function prudencioAreasConhecidas_() {
+  var vistos = {};
+  var lista = [];
+
+  function registrar(nomeBruto) {
+    var nome = String(nomeBruto || '').trim();
+    if (!nome || nome === 'Todas' || /^n[aã]o informad/i.test(nome)) return;
+    var termo = prudencioNormalizar_(nome);
+    if (!termo || vistos[termo]) return;
+    vistos[termo] = true;
+    lista.push({ termo: termo, rotulo: nome });
+  }
+
+  // Cada fonte é isolada no próprio try: uma planilha fora do ar não pode
+  // derrubar o reconhecimento de área das outras 3.
+  try {
+    var totais = getCruzAnoCompleto(getAnosDisponiveis()[0]).totaisPorDepartamentoMes || {};
+    Object.keys(totais).forEach(registrar);
+  } catch (e) { /* silêncio proposital */ }
+  try { (getAtsAbertos(false).porArea || []).forEach(function (a) { registrar(a.nome); }); } catch (e) {}
+  try { (getRiscosAltos(false).riscos || []).forEach(function (r) { registrar(r.area); }); } catch (e) {}
+  try { (getApontamentosNovo(false).porArea || []).forEach(function (a) { registrar(a.nome); }); } catch (e) {}
+
+  return lista;
+}
+
+/**
+ * Resumo de UMA área específica, cruzando as 5 ferramentas área-conscientes
+ * do portal. Cada fonte é isolada no próprio try/catch: uma planilha fora do
+ * ar tira só a linha dela do resumo, não o resumo inteiro (mesmo espírito do
+ * `get*` que nunca lança — aqui, "não lança" quer dizer "essa fonte some da
+ * resposta", já que a resposta final é texto de chat, não um objeto {erro}).
+ */
+function prudencioResumoArea_(ctx, area) {
+  var alvo = prudencioNormalizar_(area);
+  var partes = ['Resumo de **' + area + '**:', ''];
+  var fontes = [];
+
+  function achar(lista, campoNome) {
+    return (lista || []).filter(function (x) {
+      return prudencioNormalizar_(x[campoNome] || '') === alvo;
+    })[0] || null;
+  }
+
+  try {
+    var ocorr = ctx.ferramenta('ocorrencias_por_area', {});
+    var lOcorr = achar(ocorr.areas, 'area');
+    if (lOcorr) {
+      partes.push('**Ocorrências (' + ocorr.ano + ')**: ' + lOcorr.total + ' no total — ' +
+        lOcorr.primeirosSocorros + ' primeiros socorros, ' +
+        (lOcorr.comAfastamento + lOcorr.semAfastamento) + ' registráveis, ' +
+        lOcorr.quaseAcidente + ' quase acidentes.');
+      fontes.push('Ocorrências por área');
+    }
+  } catch (e) { /* fonte fora do ar não derruba o resumo inteiro */ }
+
+  try {
+    var ats = ctx.ferramenta('acoes_ats', {});
+    var lAts = achar(ats.porArea, 'nome');
+    if (lAts) {
+      partes.push('**ATS**: ' + lAts.total + ' ações (' + lAts.vencido + ' vencidas).');
+      fontes.push('ATS — ações por responsável');
+    }
+  } catch (e) {}
+
+  try {
+    var riscos = ctx.ferramenta('riscos_por_area', {});
+    var lRisco = achar(riscos.areas, 'area');
+    if (lRisco) {
+      partes.push('**RISK**: ' + lRisco.quantidade + ' itens (' + lRisco.andamento +
+        ' em andamento, ' + lRisco.concluido + ' concluídos), orçamento de R$ ' +
+        prudencioFormatarNumero_(lRisco.orcamento) + '.');
+      fontes.push('Riscos Altos (RISK) — por área');
+    }
+  } catch (e) {}
+
+  try {
+    var apont = ctx.ferramenta('apontamentos_por_area', {});
+    var lApont = achar(apont.porArea, 'nome');
+    if (lApont) {
+      partes.push('**Apontamentos (TAG)**: ' + lApont.total + ' TAGs registradas.');
+      fontes.push('Apontamentos (TAGs de segurança) — por área');
+    }
+  } catch (e) {}
+
+  try {
+    var corpo = ctx.ferramenta('partes_do_corpo_por_area', {});
+    var lCorpo = achar(corpo.areas, 'area');
+    if (lCorpo && lCorpo.parteDoCorpoMaisAtingida) {
+      partes.push('**Partes do corpo (' + corpo.ano + ')**: a região mais atingida é ' +
+        lCorpo.parteDoCorpoMaisAtingida.regiao + ' (' + lCorpo.parteDoCorpoMaisAtingida.total + ' casos).');
+      fontes.push('Partes do corpo atingidas — por área');
+    }
+  } catch (e) {}
+
+  if (partes.length === 2) {
+    partes.push('Não encontrei dados de nenhuma fonte pra essa área — confere se o nome está certo.');
+  }
+
+  return { texto: partes.join('\n'), fontes: fontes };
+}
+
+/**
  * As intenções que o Prudêncio entende sem IA.
  *
  * `termos` são gatilhos: basta UM aparecer na pergunta. Ordem importa pouco —
@@ -2732,7 +2846,34 @@ function prudencioFormatarTaxa_(v) {
  * portal. Se lançar, prudencioResponderSemIa_ transforma em mensagem amigável.
  */
 function prudencioIntencoes_() {
+  // Calculado uma vez por chamada e fechado nas duas intenções abaixo — termos
+  // (pro placar) e responder (pra descobrir QUAL área bateu). Duas leituras
+  // cacheadas por request é custo desprezível.
+  var areasConhecidas = prudencioAreasConhecidas_();
+
   return [
+    {
+      // ANTES de ocorrencias_por_area de propósito: numa pergunta que cita
+      // uma área E uma palavra genérica ("qual área a logística está"), o
+      // empate de pontos é desfeito pela ORDEM — a resposta específica (o
+      // resumo cruzado de uma área) é mais útil que o top-3 genérico.
+      nome: 'area_especifica',
+      termos: areasConhecidas.map(function (a) { return a.termo; }),
+      responder: function (ctx) {
+        var cercado = ' ' + ctx.texto + ' ';
+        var candidatas = areasConhecidas.filter(function (a) {
+          return cercado.indexOf(' ' + a.termo + ' ') !== -1;
+        });
+        if (!candidatas.length) return { texto: 'Não identifiquei uma área conhecida na pergunta.' };
+
+        // Empate entre áreas candidatas: a de nome mais específico (mais
+        // palavras) vence — "montagem lavanderia" bate "montagem" se a
+        // pergunta citar o nome completo.
+        candidatas.sort(function (a, b) { return b.termo.split(' ').length - a.termo.split(' ').length; });
+
+        return prudencioResumoArea_(ctx, candidatas[0].rotulo);
+      }
+    },
     {
       nome: 'saudacao',
       termos: ['bom dia', 'boa tarde', 'boa noite', 'ola', 'oi', 'eai', 'e ai', 'tudo bem', 'opa'],
@@ -2753,12 +2894,16 @@ function prudencioIntencoes_() {
           texto: 'Sou o Prudêncio, ' + ctx.nome + ' — a Cruz Verde que cuida deste portal.\n\n' +
             'Hoje eu respondo sobre:\n' +
             '• **Ocorrências por área** — quem lidera, quantas por tipo\n' +
+            '• **Uma área específica** — cite o nome dela (ex: "como está a logística") e eu ' +
+            'cruzo ocorrências, ATS, RISK, apontamentos e partes do corpo dessa área\n' +
             '• **Taxas TRIR e FAI** — realizado, meta e OL\n' +
             '• **ATS** — ações abertas e vencidas, por responsável\n' +
+            '• **RISK** — riscos altos, orçamento e status\n' +
+            '• **Apontamentos** — TAGs de segurança do Gensuite\n' +
             '• **Histórico por ano** — a tendência de acidentes\n' +
             '• **Partes do corpo** — o que mais se machuca\n' +
             '• **Quase acidentes** — volume e classificação A/B/C\n\n' +
-            'É só perguntar com essas palavras que eu busco o número.'
+            'É só perguntar com essas palavras (ou o nome de uma área) que eu busco o número.'
         };
       }
     },
@@ -2958,6 +3103,7 @@ function prudencioResponderSemIa_(pergunta, nome) {
 
   var contexto = {
     nome: nome,
+    texto: texto, // pergunta já normalizada — só o intent area_especifica usa
     ferramenta: function (chave, input) {
       var f = porNome[chave];
       if (!f) throw new Error('Ferramenta indisponível: ' + chave);
@@ -2994,6 +3140,7 @@ function prudencioResponderSemIa_(pergunta, nome) {
         'indicadores do portal, não texto livre.\n\n' +
         'O que eu sei responder agora:\n' +
         '• "qual **área** tem mais ocorrências"\n' +
+        '• "como está a **[nome da área]**" (ex: "como está a logística")\n' +
         '• "como está a **taxa** TRIR"\n' +
         '• "quantas **ações** do ATS estão vencidas"\n' +
         '• "qual a **tendência** por ano"\n' +
